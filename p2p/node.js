@@ -4,7 +4,7 @@ const http = require('http');
 const fs   = require('fs');
 const bc   = require('../blockchain');
 
-const PEERS_FILE    = 'peers.json';
+const PEERS_FILE    = require('path').join(__dirname, '..', 'peers.json');
 const SYNC_INTERVAL = 10_000; // ms между циклами синхронизации
 const MAX_PEERS     = 50;     // максимум пиров
 const REQ_TIMEOUT   = 4_000;  // таймаут запроса к пиру

@@ -2,11 +2,15 @@
 'use strict';
 const crypto   = require('crypto');
 const fs       = require('fs');
+const path     = require('path');
 const ecdsa    = require('./crypto/ecdsa');
 const mn       = require('./crypto/mnemonic');
 
-const WALLETS_FILE  = 'wallets.json';
-const SESSIONS_FILE = 'sessions.json';
+// Файлы данных всегда рядом с кодом, а не в текущем каталоге процесса:
+// иначе запуск `node /opt/qatrol/miner.js` из другого каталога создаёт пустые кошельки.
+const DATA_DIR      = __dirname;
+const WALLETS_FILE  = path.join(DATA_DIR, 'wallets.json');
+const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const SESSION_TTL   = 7 * 24 * 60 * 60 * 1000;
 
 // ─── AES-256-GCM ─────────────────────────────────────────────────────────────
@@ -41,12 +45,33 @@ function saveWallets(w) { fs.writeFileSync(WALLETS_FILE, JSON.stringify(w, null,
 
 // ─── Сессии ──────────────────────────────────────────────────────────────────
 
-function loadSessions() {
-  if (!fs.existsSync(SESSIONS_FILE)) return {};
-  try { return JSON.parse(fs.readFileSync(SESSIONS_FILE, 'utf8')); }
-  catch { return {}; }
+// Сессии кешируются в памяти: файл перечитывается, только когда его изменил
+// другой процесс (бот, вторая нода). На каждый запрос чтения с диска больше нет.
+let _sessionsCache = null;
+let _sessionsMtime = 0;
+
+function sessionsMtime() {
+  try { return fs.statSync(SESSIONS_FILE).mtimeMs; } catch { return 0; }
 }
-function saveSessions(s) { fs.writeFileSync(SESSIONS_FILE, JSON.stringify(s, null, 2)); }
+
+function loadSessions() {
+  const m = sessionsMtime();
+  if (_sessionsCache && m === _sessionsMtime) return _sessionsCache;
+  if (m === 0) { _sessionsCache = {}; _sessionsMtime = 0; return _sessionsCache; }
+  try {
+    _sessionsCache = JSON.parse(fs.readFileSync(SESSIONS_FILE, 'utf8'));
+  } catch {
+    _sessionsCache = {};
+  }
+  _sessionsMtime = m;
+  return _sessionsCache;
+}
+
+function saveSessions(s) {
+  _sessionsCache = s;
+  fs.writeFileSync(SESSIONS_FILE, JSON.stringify(s, null, 2));
+  _sessionsMtime = sessionsMtime();
+}
 
 function createSession(address) {
   const token    = crypto.randomBytes(32).toString('hex');

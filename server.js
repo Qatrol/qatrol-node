@@ -40,7 +40,22 @@ function proxyMiner(req, res, targetPath) {
 
 const MIME = { '.html':'text/html;charset=utf-8', '.js':'application/javascript', '.css':'text/css', '.png':'image/png', '.svg':'image/svg+xml', '.ico':'image/x-icon' };
 
+const PUBLIC_DIR = path.join(__dirname, 'public');
+
+// Отдаём только файлы внутри public/. Раньше путь собирался как path.join(__dirname,'public',url)
+// и запрос вида GET /../package.json вытаскивал любой файл с диска.
+function safePublicPath(rawUrl) {
+  let decoded;
+  try { decoded = decodeURIComponent(rawUrl); } catch { return null; }
+  if (decoded.includes('\0')) return null;
+  if (decoded.includes('..')) return null;
+  const full = path.resolve(PUBLIC_DIR, '.' + (decoded.startsWith('/') ? decoded : '/' + decoded));
+  if (full !== PUBLIC_DIR && !full.startsWith(PUBLIC_DIR + path.sep)) return null;
+  return full;
+}
+
 function serveFile(res, filePath) {
+  if (!filePath) return false;
   if (!fs.existsSync(filePath)||!fs.statSync(filePath).isFile()) return false;
   res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)]||'text/plain', 'Cache-Control': 'no-cache' });
   fs.createReadStream(filePath).pipe(res);
@@ -87,7 +102,7 @@ const server = http.createServer(async (req, res) => {
   if (url==='/richlist'||url==='/richlist/') { serveFile(res, path.join(__dirname,'public/richlist.html')); return; }
   if (url==='/stats-page'||url==='/network') { serveFile(res, path.join(__dirname,'public/stats.html')); return; }
   if (url==='/status')                    { serveFile(res, path.join(__dirname,'public/status.html')); return; }
-  if (serveFile(res, path.join(__dirname,'public',url))) return;
+  if (serveFile(res, safePublicPath(url))) return;
   if (url.startsWith('/app'))             { serveFile(res, path.join(__dirname,'public/app.html')); return; }
   res.writeHead(404); res.end('404');
 });

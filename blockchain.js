@@ -4,8 +4,9 @@ const crypto = require('crypto');
 const fs     = require('fs');
 const ecdsa  = require('./crypto/ecdsa');
 
-const DB_FILE      = 'blockchain.json';
-const GENESIS_FILE = 'genesis.json';
+const path = require('path');
+const DB_FILE      = path.join(__dirname, 'blockchain.json');
+const GENESIS_FILE = path.join(__dirname, 'genesis.json');
 
 // ─── Параметры монеты ─────────────────────────────────────────────────────────
 const COIN_NAME        = 'Qatrol Coin';

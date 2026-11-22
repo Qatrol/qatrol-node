@@ -2,7 +2,9 @@
 // Запуск: pm2 start ecosystem.config.js
 // Обновление: pm2 reload ecosystem.config.js --update-env
 'use strict';
-require('dotenv').config({ path: '/root/.env' });
+// .env ищется рядом с конфигом; если dotenv не установлен — переменные берутся из pm2.
+try { require('dotenv').config({ path: process.env.QTR_ENV_FILE || require('path').join(__dirname, '.env') }); }
+catch { /* dotenv опционален */ }
 
 const env = {
   QTR_PORT:              process.env.QTR_PORT              || '3001',

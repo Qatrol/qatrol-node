@@ -13,14 +13,20 @@
     "build:miner-client:win": "npx pkg pool/miner-client.js --targets node18-win-x64 --output dist/qtr-pool-miner.exe",
     "build:miner-client:linux": "npx pkg pool/miner-client.js --targets node18-linux-x64 --output dist/qtr-pool-miner-linux",
     "build:miner-client:all": "npx pkg pool/miner-client.js --targets node18-win-x64,node18-linux-x64 --out-path dist",
-    "build:miner-win:embed": "node scripts/build-miner-win-embed.js"
+    "build:miner-win:embed": "node scripts/build-miner-win-embed.js",
+    "test": "node test-api.js"
   },
   "dependencies": {
-    "node-telegram-bot-api": "^0.66.0",
+    "node-telegram-bot-api": "^0.66.0"
+  },
+  "devDependencies": {
     "pkg": "^5.8.1"
   },
-  "devDependencies": {},
   "bin": {
     "qtr-pool-miner": "pool/miner-client.js"
-  }
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED"
 }

@@ -454,9 +454,19 @@ function startAPI() {
     function ok(obj)         { res.writeHead(200, CORS); res.end(JSON.stringify(obj)); }
     function fail(code, msg) { res.writeHead(code, CORS); res.end(JSON.stringify({ error: msg })); }
     function body(cb) {
+      // Ограничение размера: без него один POST с гигабайтом JSON съедал всю память ноды.
+      const MAX_BODY = 1024 * 1024;
       let b = '';
-      req.on('data', d => b += d);
-      req.on('end', () => { try { cb(JSON.parse(b || '{}')); } catch { fail(400, 'Invalid JSON'); } });
+      let tooBig = false;
+      req.on('data', d => {
+        if (tooBig) return;
+        b += d;
+        if (b.length > MAX_BODY) { tooBig = true; b = ''; fail(413, 'Тело запроса больше 1 МБ'); }
+      });
+      req.on('end', () => {
+        if (tooBig) return;
+        try { cb(JSON.parse(b || '{}')); } catch { fail(400, 'Invalid JSON'); }
+      });
     }
 
     const data   = loadData();
@@ -774,6 +784,8 @@ function startAPI() {
       return body(({ to, amount, memo, password }) => {
         const from = sess.address;
         if (!to || !amount) return fail(400, 'Нужны: to, amount');
+        // Адрес: K и 39 hex-символов в текущей схеме, 40 у старых (genesis) адресов.
+        if (typeof to !== 'string' || !/^K[0-9A-F]{39,40}$/.test(to)) return fail(400, 'Некорректный адрес получателя');
         amount = parseFloat(amount);
         if (isNaN(amount) || amount <= 0) return fail(400, 'Некорректная сумма');
         if (from === to) return fail(400, 'Нельзя отправить себе');
