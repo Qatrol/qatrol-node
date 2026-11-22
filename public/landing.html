@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="description" content="Qatrol Coin (QTR) — децентрализованная криптовалюта. Майни прямо с компьютера, 16.7 QTR за блок. Фиксированная эмиссия 1 млрд монет.">
+<title>Qatrol Coin — Криптовалюта нового поколения</title>
+<link rel="stylesheet" href="style.css">
+<style>
+/* ─── Landing-only styles ─────────────────────────────────────────────────── */
+:root {
+  --accent:  #7b6fff;
+  --accent2: #d4af37;
+  --bg:      #080808;
+  --bg2:     #0f0f0f;
+  --bg3:     #161616;
+  --bg4:     #1e1e1e;
+  --border:  rgba(212,175,55,.12);
+  --border2: rgba(212,175,55,.28);
+  --gold:    #d4af37;
+  --gold2:   #f5e27a;
+  --gold3:   #8b6914;
+  --green:   #3ddc84;
+  --red:     #ff5555;
+  --text:    #e8e0d0;
+  --muted:   #5a5040;
+  --mono:    'Space Mono', monospace;
+  --sans:    'Space Grotesk', sans-serif;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; font-size:15px; }
+body { background:var(--bg); color:var(--text); font-family:var(--sans); -webkit-font-smoothing:antialiased; overflow-x:hidden; }
+body::before {
+  content:''; position:fixed; inset:0; z-index:0; pointer-events:none;
+  background-image: linear-gradient(rgba(212,175,55,.025) 1px,transparent 1px), linear-gradient(90deg,rgba(212,175,55,.025) 1px,transparent 1px);
+  background-size:50px 50px;
+}
+a { color:inherit; text-decoration:none; }
+
+/* ─── NAV ─────────────────────────────────────────────────────────────────── */
+.nav {
+  position:fixed; top:0; left:0; right:0; z-index:100;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 32px; height:64px;
+  background:rgba(8,8,8,.85); backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--border);
+}
+.nav-logo { display:flex; align-items:center; gap:10px; font-size:20px; font-weight:800; letter-spacing:-1px; }
+.nav-logo-sym { color:var(--gold); font-size:24px; }
+.nav-links { display:flex; align-items:center; gap:24px; }
+.nav-link { font-size:13px; font-weight:600; color:var(--muted); transition:color .2s; }
+.nav-link:hover { color:var(--text); }
+.nav-btns { display:flex; gap:10px; align-items:center; }
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 20px; border-radius:8px; border:none; cursor:pointer; font-family:var(--sans); font-size:13px; font-weight:700; transition:all .2s; text-decoration:none; white-space:nowrap; }
+.btn-outline { background:transparent; border:1px solid var(--border2); color:var(--gold); }
+.btn-outline:hover { background:rgba(212,175,55,.08); border-color:var(--gold); transform:translateY(-1px); }
+.btn-gold { background:linear-gradient(135deg,var(--gold3),var(--gold)); color:#000; }
+.btn-gold:hover { background:linear-gradient(135deg,var(--gold),var(--gold2)); transform:translateY(-1px); box-shadow:0 4px 20px rgba(212,175,55,.3); }
+.btn-tg { background:linear-gradient(135deg,#1a6fa0,#229ed9); color:#fff; }
+.btn-tg:hover { transform:translateY(-1px); box-shadow:0 4px 20px rgba(34,158,217,.3); }
+.btn-lg { padding:14px 28px; font-size:15px; border-radius:10px; }
+.btn-xl { padding:16px 36px; font-size:16px; border-radius:12px; }
+.ham { display:none; flex-direction:column; gap:5px; cursor:pointer; padding:8px; }
+.ham span { display:block; width:22px; height:2px; background:var(--text); border-radius:2px; transition:.3s; }
+
+/* ─── HERO ────────────────────────────────────────────────────────────────── */
+.hero {
+  min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  text-align:center; padding:120px 24px 80px; position:relative; z-index:1;
+}
+.hero-glow {
+  position:absolute; top:-200px; left:50%; transform:translateX(-50%);
+  width:900px; height:600px; pointer-events:none;
+  background:radial-gradient(ellipse, rgba(212,175,55,.08) 0%, transparent 65%);
+}
+.hero-badge {
+  display:inline-flex; align-items:center; gap:8px;
+  background:rgba(212,175,55,.08); border:1px solid var(--border2);
+  border-radius:100px; padding:6px 16px; margin-bottom:28px;
+  font-family:var(--mono); font-size:11px; color:var(--gold); letter-spacing:2px; text-transform:uppercase;
+}
+.hero-badge-dot { width:6px; height:6px; background:var(--green); border-radius:50%; animation:blink 2s infinite; }
+@keyframes blink { 0%,100%{opacity:1}50%{opacity:.3} }
+.hero-title { font-size:clamp(44px,8vw,88px); font-weight:800; letter-spacing:-3px; line-height:.95; margin-bottom:20px; }
+.hero-title .gold { color:var(--gold); }
+.hero-title .dim { color:rgba(232,224,208,.35); }
+.hero-sub { font-size:clamp(16px,2.5vw,20px); color:rgba(232,224,208,.6); max-width:560px; line-height:1.6; margin-bottom:40px; }
+.hero-btns { display:flex; flex-wrap:wrap; gap:12px; justify-content:center; margin-bottom:64px; }
+.hero-stats { display:flex; flex-wrap:wrap; gap:32px; justify-content:center; }
+.hero-stat { text-align:center; }
+.hero-stat-val { font-family:var(--mono); font-size:28px; font-weight:700; color:var(--gold); }
+.hero-stat-lbl { font-family:var(--mono); font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:2px; margin-top:4px; }
+.hero-sep { width:1px; height:40px; background:var(--border); align-self:center; }
+
+/* ─── LIVE BAR ────────────────────────────────────────────────────────────── */
+.live-bar {
+  position:relative; z-index:1;
+  background:var(--bg2); border-top:1px solid var(--border); border-bottom:1px solid var(--border);
+  padding:20px 0;
+}
+.live-bar-inner { max-width:1100px; margin:0 auto; padding:0 24px; display:flex; flex-wrap:wrap; gap:0; justify-content:space-around; }
+.live-item { display:flex; align-items:center; gap:12px; padding:8px 20px; }
+.live-icon { font-size:22px; }
+.live-val { font-family:var(--mono); font-size:20px; font-weight:700; color:var(--gold); }
+.live-lbl { font-family:var(--mono); font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1.5px; margin-top:2px; }
+.live-dot { width:6px; height:6px; border-radius:50%; background:var(--green); animation:blink 2s infinite; margin-left:6px; flex-shrink:0; }
+
+/* ─── SECTIONS ────────────────────────────────────────────────────────────── */
+section { position:relative; z-index:1; }
+.section { max-width:1100px; margin:0 auto; padding:100px 24px; }
+.section-label { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:3px; color:var(--gold); margin-bottom:16px; }
+.section-title { font-size:clamp(32px,5vw,52px); font-weight:800; letter-spacing:-2px; line-height:1; margin-bottom:16px; }
+.section-sub { font-size:16px; color:rgba(232,224,208,.55); max-width:520px; line-height:1.7; margin-bottom:60px; }
+
+/* ─── HOW IT WORKS ────────────────────────────────────────────────────────── */
+.steps { display:grid; grid-template-columns:repeat(3,1fr); gap:24px; }
+.step { background:var(--bg2); border:1px solid var(--border); border-radius:20px; padding:32px; transition:border-color .2s, transform .2s; }
+.step:hover { border-color:var(--border2); transform:translateY(-4px); }
+.step-num { font-family:var(--mono); font-size:48px; font-weight:700; color:rgba(212,175,55,.15); line-height:1; margin-bottom:16px; }
+.step-title { font-size:20px; font-weight:700; margin-bottom:10px; }
+.step-sub { font-size:14px; color:rgba(232,224,208,.55); line-height:1.6; }
+.step-time { display:inline-block; margin-top:16px; font-family:var(--mono); font-size:11px; color:var(--gold); background:rgba(212,175,55,.08); border:1px solid var(--border); padding:4px 12px; border-radius:100px; }
+
+/* ─── FEATURES ────────────────────────────────────────────────────────────── */
+.features { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+.feat { background:var(--bg2); border:1px solid var(--border); border-radius:16px; padding:28px; transition:all .2s; }
+.feat:hover { border-color:rgba(212,175,55,.3); background:var(--bg3); }
+.feat-icon { font-size:28px; margin-bottom:14px; }
+.feat-title { font-size:16px; font-weight:700; margin-bottom:8px; }
+.feat-sub { font-size:13px; color:rgba(232,224,208,.5); line-height:1.65; }
+
+/* ─── BLOCKS FEED ─────────────────────────────────────────────────────────── */
+.blocks-section { background:var(--bg2); border-top:1px solid var(--border); border-bottom:1px solid var(--border); }
+.blocks-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:12px; }
+.l-block { background:var(--bg3); border:1px solid var(--border); border-radius:12px; padding:16px; cursor:pointer; transition:all .15s; }
+.l-block:hover { border-color:var(--border2); }
+.l-block-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.l-block-num { font-family:var(--mono); font-size:15px; font-weight:700; color:var(--gold); }
+.l-block-age { font-family:var(--mono); font-size:10px; color:var(--muted); }
+.l-block-hash { font-family:var(--mono); font-size:10px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-bottom:8px; }
+.l-block-meta { display:flex; gap:10px; font-family:var(--mono); font-size:11px; color:var(--muted); flex-wrap:wrap; }
+.badge { background:rgba(212,175,55,.1); color:var(--gold); padding:2px 8px; border-radius:5px; font-size:10px; }
+.blocks-empty { text-align:center; padding:40px; color:var(--muted); font-family:var(--mono); font-size:13px; }
+
+/* ─── COMMUNITY ───────────────────────────────────────────────────────────── */
+.community-card {
+  background:linear-gradient(135deg, rgba(26,111,160,.15), rgba(34,158,217,.08));
+  border:1px solid rgba(34,158,217,.25); border-radius:24px; padding:60px;
+  display:flex; align-items:center; justify-content:space-between; gap:40px; flex-wrap:wrap;
+}
+.community-left { flex:1; min-width:240px; }
+.community-title { font-size:clamp(24px,4vw,36px); font-weight:800; margin-bottom:12px; }
+.community-sub { font-size:15px; color:rgba(232,224,208,.55); line-height:1.7; }
+.tg-icon { font-size:80px; opacity:.3; }
+
+/* ─── FOOTER ──────────────────────────────────────────────────────────────── */
+.footer {
+  position:relative; z-index:1;
+  border-top:1px solid var(--border); padding:48px 24px;
+  background:var(--bg2);
+}
+.footer-inner { max-width:1100px; margin:0 auto; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:24px; }
+.footer-logo { font-size:20px; font-weight:800; }
+.footer-logo span { color:var(--gold); }
+.footer-links { display:flex; gap:24px; flex-wrap:wrap; }
+.footer-link { font-size:13px; color:var(--muted); transition:color .2s; }
+.footer-link:hover { color:var(--text); }
+.footer-right { font-family:var(--mono); font-size:11px; color:var(--muted); text-align:right; }
+
+/* ─── SCROLL REVEAL ───────────────────────────────────────────────────────── */
+.reveal { opacity:0; transform:translateY(30px); transition:opacity .6s ease, transform .6s ease; }
+.reveal.visible { opacity:1; transform:translateY(0); }
+
+/* ─── MOBILE NAV ─────────────────────────────────────────────────────────── */
+.mobile-menu {
+  display:none; position:fixed; top:64px; left:0; right:0; z-index:99;
+  background:rgba(8,8,8,.97); backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--border); padding:20px 24px;
+  flex-direction:column; gap:16px;
+}
+.mobile-menu.open { display:flex; }
+.mobile-menu a { font-size:16px; font-weight:600; color:var(--text); padding:10px 0; border-bottom:1px solid var(--border); }
+.mobile-menu a:last-child { border-bottom:none; }
+
+/* ─── RESPONSIVE ──────────────────────────────────────────────────────────── */
+@media(max-width:768px) {
+  .nav-links { display:none; }
+  .nav-btns .btn-outline { display:none; }
+  .ham { display:flex; }
+  .steps { grid-template-columns:1fr; }
+  .features { grid-template-columns:1fr 1fr; }
+  .community-card { padding:32px 24px; flex-direction:column; text-align:center; }
+  .tg-icon { display:none; }
+  .hero-sep { display:none; }
+  .hero-stats { gap:20px; }
+  .live-item { padding:6px 12px; }
+  .live-val { font-size:16px; }
+}
+@media(max-width:480px) {
+  .features { grid-template-columns:1fr; }
+  .hero-btns .btn-xl { width:100%; }
+  .nav { padding:0 16px; }
+  .section { padding:72px 16px; }
+}
+
+/* ─── TOKENOMICS ──────────────────────────────────────────────────────────── */
+.tknm-grid { display:grid; grid-template-columns:1fr 1fr; gap:40px; align-items:center; }
+.tknm-bars { display:flex; flex-direction:column; gap:16px; }
+.tknm-bar-row { display:flex; flex-direction:column; gap:6px; }
+.tknm-bar-label { display:flex; justify-content:space-between; font-size:13px; }
+.tknm-bar-name { color:var(--text); font-weight:600; }
+.tknm-bar-val { font-family:var(--mono); color:var(--gold); }
+.tknm-bar-track { height:8px; background:var(--bg3); border-radius:4px; overflow:hidden; }
+.tknm-bar-fill { height:100%; border-radius:4px; transition:width 1.2s cubic-bezier(.4,0,.2,1); width:0; }
+.tknm-bar-fill.gold  { background:linear-gradient(90deg,var(--gold3),var(--gold)); }
+.tknm-bar-fill.blue  { background:linear-gradient(90deg,#1a5fa0,#4a9fd4); }
+.tknm-bar-fill.green { background:linear-gradient(90deg,#1a6b3a,var(--green)); }
+.tknm-stats { display:flex; flex-direction:column; gap:20px; }
+.tknm-stat { background:var(--bg3); border:1px solid var(--border); border-radius:16px; padding:24px; }
+.tknm-stat-val { font-family:var(--mono); font-size:28px; font-weight:700; color:var(--gold); margin-bottom:4px; }
+.tknm-stat-lbl { font-size:13px; color:rgba(232,224,208,.5); }
+@media(max-width:768px){ .tknm-grid{grid-template-columns:1fr;} }
+
+/* ─── CALCULATOR ─────────────────────────────────────────────────────────── */
+.calc-card{background:var(--bg2);border:1px solid var(--border);border-radius:24px;padding:48px;max-width:780px;margin:0 auto}
+.calc-grid{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:start}
+.calc-inputs{display:flex;flex-direction:column;gap:20px}
+.calc-field label{display:block;font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:8px}
+.calc-field input[type=range]{width:100%;-webkit-appearance:none;height:4px;border-radius:2px;background:var(--bg3);outline:none;cursor:pointer}
+.calc-field input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--gold);cursor:pointer;box-shadow:0 0 8px rgba(212,175,55,.4)}
+.calc-field-val{font-family:var(--mono);font-size:22px;font-weight:700;color:var(--gold);margin-top:6px}
+.calc-results{display:flex;flex-direction:column;gap:14px}
+.calc-result{background:var(--bg3);border:1px solid var(--border);border-radius:14px;padding:18px 20px;display:flex;justify-content:space-between;align-items:center}
+.calc-result-lbl{font-size:13px;color:rgba(232,224,208,.55)}
+.calc-result-val{font-family:var(--mono);font-size:18px;font-weight:700;color:var(--gold)}
+.calc-note{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:16px;line-height:1.6}
+@media(max-width:640px){.calc-grid{grid-template-columns:1fr}.calc-card{padding:28px 20px}}
+
+/* ─── DOWNLOAD ────────────────────────────────────────────────────────────── */
+.dl-card {
+  background:linear-gradient(135deg,rgba(123,111,255,.1),rgba(212,175,55,.06));
+  border:1px solid rgba(123,111,255,.3); border-radius:24px; padding:60px;
+  display:flex; align-items:center; justify-content:space-between; gap:40px; flex-wrap:wrap;
+}
+.dl-left { flex:1; min-width:260px; }
+.dl-title { font-size:clamp(22px,4vw,36px); font-weight:800; margin-bottom:12px; }
+.dl-sub { font-size:15px; color:rgba(232,224,208,.55); line-height:1.7; margin-bottom:28px; }
+.dl-chips { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:28px; }
+.dl-chip { font-family:var(--mono); font-size:11px; padding:5px 12px; border-radius:100px; background:rgba(255,255,255,.06); border:1px solid var(--border); color:var(--muted); }
+.dl-right { display:flex; flex-direction:column; gap:12px; align-items:flex-end; flex-shrink:0; }
+.btn-purple { background:linear-gradient(135deg,#5046c8,#7b6fff); color:#fff; }
+.btn-purple:hover { transform:translateY(-2px); box-shadow:0 4px 24px rgba(123,111,255,.4); }
+.dl-note { font-family:var(--mono); font-size:10px; color:var(--muted); text-align:right; }
+@media(max-width:768px){ .dl-card{padding:32px 24px;} .dl-right{align-items:stretch;width:100%;} .dl-note{text-align:center;} }
+
+/* ─── ROADMAP ─────────────────────────────────────────────────────────────── */
+.roadmap { display:flex; flex-direction:column; gap:0; position:relative; max-width:680px; }
+.roadmap::before { content:''; position:absolute; left:19px; top:20px; bottom:20px; width:2px; background:var(--border); }
+.rm-item { display:flex; gap:24px; align-items:flex-start; padding-bottom:32px; position:relative; }
+.rm-dot { width:40px; height:40px; border-radius:50%; border:2px solid var(--border); background:var(--bg2); display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; z-index:1; }
+.rm-dot.done { border-color:var(--green); background:rgba(61,220,132,.1); }
+.rm-dot.active { border-color:var(--gold); background:rgba(212,175,55,.1); animation:pulse-rm 2s infinite; }
+@keyframes pulse-rm { 0%,100%{box-shadow:0 0 0 0 rgba(212,175,55,.3)} 50%{box-shadow:0 0 0 8px rgba(212,175,55,0)} }
+.rm-content { padding-top:8px; }
+.rm-title { font-size:16px; font-weight:700; margin-bottom:4px; }
+.rm-sub { font-size:13px; color:rgba(232,224,208,.5); line-height:1.6; }
+.rm-badge { display:inline-block; margin-top:8px; font-family:var(--mono); font-size:10px; padding:3px 10px; border-radius:100px; }
+.rm-badge.done { background:rgba(61,220,132,.1); color:var(--green); border:1px solid rgba(61,220,132,.3); }
+.rm-badge.active { background:rgba(212,175,55,.1); color:var(--gold); border:1px solid var(--border); }
+.rm-badge.soon { background:rgba(255,255,255,.04); color:var(--muted); border:1px solid var(--border); }
+
+/* ─── FAQ ──────────────────────────────────────────────────────────────────── */
+.faq { display:flex; flex-direction:column; gap:12px; max-width:720px; }
+.faq-item { background:var(--bg2); border:1px solid var(--border); border-radius:14px; overflow:hidden; }
+.faq-q { display:flex; justify-content:space-between; align-items:center; padding:20px 24px; cursor:pointer; font-size:15px; font-weight:600; transition:background .2s; user-select:none; }
+.faq-q:hover { background:var(--bg3); }
+.faq-arrow { color:var(--gold); font-size:18px; transition:transform .3s; flex-shrink:0; }
+.faq-item.open .faq-arrow { transform:rotate(180deg); }
+.faq-a { display:none; padding:0 24px 20px; font-size:14px; color:rgba(232,224,208,.6); line-height:1.7; border-top:1px solid var(--border); padding-top:16px; }
+.faq-item.open .faq-a { display:block; }
+</style>
+</head>
+<body>
+
+<!-- ─── NAV ─────────────────────────────────────────────────────────────── -->
+<nav class="nav">
+  <a href="/" class="nav-logo">
+    <span class="nav-logo-sym">◆</span>
+    <span>QATROL<span style="color:var(--muted);font-weight:400"> COIN</span></span>
+  </a>
+  <div class="nav-links">
+    <a href="#how" class="nav-link" data-i18n="land.nav.mining">Майнинг</a>
+    <a href="#features" class="nav-link" data-i18n="land.nav.about">О проекте</a>
+    <a href="/network" class="nav-link" data-i18n="nav.stats">Статистика</a>
+    <a href="/richlist" class="nav-link" data-i18n="nav.richlist">Rich List</a>
+    <a href="/status" class="nav-link" data-i18n="nav.status">Статус</a>
+    <a href="https://t.me/QatrolCoin" target="_blank" class="nav-link">Telegram</a>
+  </div>
+  <div class="nav-btns">
+    <a href="/login" class="btn btn-outline" data-i18n="nav.login">Войти</a>
+    <a href="/login" class="btn btn-gold" data-i18n="land.create_wallet">Создать кошелёк</a>
+    <div class="ham" id="ham" onclick="toggleMenu()">
+      <span></span><span></span><span></span>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile menu -->
+<div class="mobile-menu" id="mobileMenu">
+  <a href="#how" onclick="toggleMenu()" data-i18n="land.mob.how">Как начать</a>
+  <a href="#features" onclick="toggleMenu()" data-i18n="land.mob.features">Возможности</a>
+  <a href="#blocks" onclick="toggleMenu()" data-i18n="land.mob.blockchain">Блокчейн</a>
+  <a href="https://t.me/QatrolCoin" target="_blank" data-i18n="land.mob.tg">📢 Telegram канал</a>
+  <a href="/login" data-i18n="land.mob.login">🔑 Войти</a>
+  <a href="/login" style="color:var(--gold)" data-i18n="land.mob.create">✨ Создать кошелёк</a>
+</div>
+
+<!-- ─── HERO ─────────────────────────────────────────────────────────────── -->
+<section class="hero">
+  <div class="hero-glow"></div>
+  <div class="hero-badge">
+    <span class="hero-badge-dot"></span>
+    <span data-i18n="land.hero.badge">Сеть активна · QTR v1.0</span>
+  </div>
+  <h1 class="hero-title">
+    <span class="gold">QATROL</span><br>
+    <span class="dim">COIN</span>
+  </h1>
+  <p class="hero-sub" data-i18n="land.hero.sub">
+    Криптовалюта, которую можно добыть прямо сейчас.<br>
+    Никакого оборудования — просто скачай майнер и начни.
+  </p>
+  <div class="hero-btns">
+    <a href="/login" class="btn btn-gold btn-xl" data-i18n="land.hero.btn_create">✦ Создать кошелёк</a>
+    <a href="https://t.me/QatrolCoin" target="_blank" class="btn btn-tg btn-xl">📢 Telegram</a>
+    <a href="#how" class="btn btn-outline btn-xl" data-i18n="land.hero.btn_mine">⛏ Как майнить</a>
+  </div>
+  <div class="hero-stats">
+    <div class="hero-stat">
+      <div class="hero-stat-val" id="hs-blocks">—</div>
+      <div class="hero-stat-lbl" data-i18n="land.hero.stat_blocks">Блоков</div>
+    </div>
+    <div class="hero-sep"></div>
+    <div class="hero-stat">
+      <div class="hero-stat-val" id="hs-reward">16.7</div>
+      <div class="hero-stat-lbl" data-i18n="land.hero.stat_reward">QTR за блок</div>
+    </div>
+    <div class="hero-sep"></div>
+    <div class="hero-stat">
+      <div class="hero-stat-val" id="hs-supply">1B</div>
+      <div class="hero-stat-lbl" data-i18n="land.hero.stat_supply">Эмиссия</div>
+    </div>
+    <div class="hero-sep"></div>
+    <div class="hero-stat">
+      <div class="hero-stat-val">0.1%</div>
+      <div class="hero-stat-lbl" data-i18n="land.hero.stat_fee">Комиссия</div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── LIVE BAR ──────────────────────────────────────────────────────────── -->
+<div class="live-bar">
+  <div class="live-bar-inner">
+    <div class="live-item">
+      <div class="live-icon">⛓</div>
+      <div>
+        <div class="live-val" id="lb-blocks">—</div>
+        <div class="live-lbl"><span data-i18n="land.live.blocks">Блоков</span> <span class="live-dot"></span></div>
+      </div>
+    </div>
+    <div class="live-item">
+      <div class="live-icon">⚡</div>
+      <div>
+        <div class="live-val" id="lb-hash">—</div>
+        <div class="live-lbl" data-i18n="land.live.hashrate">Хэшрейт</div>
+      </div>
+    </div>
+    <div class="live-item">
+      <div class="live-icon">🎯</div>
+      <div>
+        <div class="live-val" id="lb-diff">—</div>
+        <div class="live-lbl" data-i18n="land.live.diff">Сложность</div>
+      </div>
+    </div>
+    <div class="live-item">
+      <div class="live-icon">⏳</div>
+      <div>
+        <div class="live-val" id="lb-pending">—</div>
+        <div class="live-lbl" data-i18n="land.live.mempool">В mempool</div>
+      </div>
+    </div>
+    <div class="live-item">
+      <div class="live-icon">💎</div>
+      <div>
+        <div class="live-val" id="lb-circ">—</div>
+        <div class="live-lbl" data-i18n="land.live.circ">В обращении</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── HOW IT WORKS ──────────────────────────────────────────────────────── -->
+<section id="how">
+  <div class="section">
+    <div class="reveal">
+      <div class="section-label" data-i18n="land.how.label">◆ Простой старт</div>
+      <h2 class="section-title" data-i18n-html="land.how.title">Три шага до<br><span style="color:var(--gold)">первых монет</span></h2>
+      <p class="section-sub" data-i18n="land.how.sub">Не нужны специальные знания. Работает на любом Windows-ПК.</p>
+    </div>
+    <div class="steps reveal">
+      <div class="step">
+        <div class="step-num">01</div>
+        <div class="step-title" data-i18n="land.step1.title">Создай кошелёк</div>
+        <div class="step-sub" data-i18n="land.step1.sub">Зарегистрируйся прямо здесь — адрес, приватный ключ и мнемоник из 12 слов генерируются мгновенно. Никаких email, никакой верификации.</div>
+        <span class="step-time" data-i18n="land.step1.time">⚡ 30 секунд</span>
+      </div>
+      <div class="step">
+        <div class="step-num">02</div>
+        <div class="step-title" data-i18n="land.step2.title">Скачай майнер</div>
+        <div class="step-sub" data-i18n="land.step2.sub">Один .exe файл. Адрес пула уже встроен внутрь. Запустил, ввёл адрес кошелька — всё. Работает в фоне, не мешает другим задачам.</div>
+        <span class="step-time" data-i18n="land.step2.time">📥 Один клик</span>
+      </div>
+      <div class="step">
+        <div class="step-num">03</div>
+        <div class="step-title" data-i18n="land.step3.title">Получай QTR</div>
+        <div class="step-sub" data-i18n="land.step3.sub">Майнер находит блоки и отправляет монеты прямо на твой кошелёк через пул. Каждый блок — 16.7 QTR. Следи за балансом в Telegram боте или на сайте.</div>
+        <span class="step-time" data-i18n="land.step3.time">💰 16.7 QTR / блок</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── FEATURES ──────────────────────────────────────────────────────────── -->
+<section id="features" style="background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);">
+  <div class="section">
+    <div class="reveal">
+      <div class="section-label" data-i18n="land.feat.label">◆ Технологии</div>
+      <h2 class="section-title" data-i18n-html="land.feat.title">Почему<br><span style="color:var(--gold)">Qatrol Coin?</span></h2>
+      <p class="section-sub" data-i18n="land.feat.sub">Настоящий блокчейн с открытым кодом, без посредников и маркетинговых обещаний.</p>
+    </div>
+    <div class="features reveal">
+      <div class="feat">
+        <div class="feat-icon">🔒</div>
+        <div class="feat-title">SHA-256 + ECDSA</div>
+        <div class="feat-sub" data-i18n="land.feat1.sub">Те же алгоритмы что в Bitcoin. Proof-of-Work майнинг, подписи P-256, BIP-39 мнемоники.</div>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">💎</div>
+        <div class="feat-title" data-i18n="land.feat2.title">Фиксированная эмиссия</div>
+        <div class="feat-sub" data-i18n="land.feat2.sub">Ровно 1,000,000,000 QTR навсегда. Никакой инфляции. Никакого допечатывания.</div>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">⛏</div>
+        <div class="feat-title" data-i18n="land.feat3.title">Майнинг на ПК</div>
+        <div class="feat-sub" data-i18n="land.feat3.sub">Не нужны ASIC и видеокарты. CPU-майнинг через пул. Пул автоматически распределяет награды.</div>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">📱</div>
+        <div class="feat-title">Telegram Wallet</div>
+        <div class="feat-sub" data-i18n="land.feat4.sub">Управляй кошельком прямо в Telegram. Переводы, баланс, статистика — всё через @QatrolCoinBot.</div>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">🌐</div>
+        <div class="feat-title" data-i18n="land.feat5.title">Открытый блокчейн</div>
+        <div class="feat-sub" data-i18n="land.feat5.sub">Каждая транзакция публична и проверяема. Обозреватель блоков доступен всем без регистрации.</div>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">💸</div>
+        <div class="feat-title" data-i18n="land.feat6.title">Минимальные комиссии</div>
+        <div class="feat-sub" data-i18n="land.feat6.sub">0.1% от суммы перевода, минимум 0.0001 QTR. Переводить 100 QTR стоит всего 0.1 QTR.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── LIVE BLOCKS ────────────────────────────────────────────────────────── -->
+<section id="blocks" class="blocks-section">
+  <div class="section">
+    <div class="reveal" style="display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:16px;margin-bottom:32px;">
+      <div>
+        <div class="section-label">◆ Live</div>
+        <h2 class="section-title" style="margin-bottom:0" data-i18n="land.blocks.title">Последние блоки</h2>
+      </div>
+      <a href="/app" class="btn btn-outline" data-i18n="common.explorer">Открыть обозреватель →</a>
+    </div>
+    <div class="blocks-grid reveal" id="blocksGrid">
+      <div class="blocks-empty" data-i18n="common.loading">Загрузка...</div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── TOKENOMICS ────────────────────────────────────────────────────────── -->
+<section style="background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);">
+  <div class="section">
+    <div class="reveal">
+      <div class="section-label" data-i18n="land.tknm.label">◆ Токеномика</div>
+      <h2 class="section-title" data-i18n-html="land.tknm.title">Распределение<br><span style="color:var(--gold)">1 000 000 000 QTR</span></h2>
+      <p class="section-sub" data-i18n="land.tknm.sub">Вся эмиссия зафиксирована в genesis-блоке. Никакой предпродажи, никаких приватных раундов.</p>
+    </div>
+    <div class="tknm-grid reveal">
+      <div class="tknm-bars">
+        <div class="tknm-bar-row">
+          <div class="tknm-bar-label">
+            <span class="tknm-bar-name" data-i18n="land.tknm.bar1">⛏ Майнинговые награды</span>
+            <span class="tknm-bar-val">~60%</span>
+          </div>
+          <div class="tknm-bar-track"><div class="tknm-bar-fill gold" data-w="60"></div></div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px;" data-i18n="land.tknm.bar1_desc">Распределяется майнерам по 16.7 QTR за блок</div>
+        </div>
+        <div class="tknm-bar-row">
+          <div class="tknm-bar-label">
+            <span class="tknm-bar-name" data-i18n="land.tknm.bar2">🌐 Genesis-резерв</span>
+            <span class="tknm-bar-val">~38%</span>
+          </div>
+          <div class="tknm-bar-track"><div class="tknm-bar-fill blue" data-w="38"></div></div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px;" data-i18n="land.tknm.bar2_desc">Резерв для ликвидности и листинга на биржах</div>
+        </div>
+        <div class="tknm-bar-row">
+          <div class="tknm-bar-label">
+            <span class="tknm-bar-name" data-i18n="land.tknm.bar3">💸 Комиссии пула</span>
+            <span class="tknm-bar-val">~2%</span>
+          </div>
+          <div class="tknm-bar-track"><div class="tknm-bar-fill green" data-w="2"></div></div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px;" data-i18n="land.tknm.bar3_desc">Операционные расходы сети и пула</div>
+        </div>
+      </div>
+      <div class="tknm-stats">
+        <div class="tknm-stat">
+          <div class="tknm-stat-val">1,000,000,000</div>
+          <div class="tknm-stat-lbl" data-i18n="land.tknm.stat1_lbl">Максимальная эмиссия QTR — навсегда</div>
+        </div>
+        <div class="tknm-stat">
+          <div class="tknm-stat-val">16.7 QTR</div>
+          <div class="tknm-stat-lbl" data-i18n="land.tknm.stat2_lbl">Награда за каждый найденный блок</div>
+        </div>
+        <div class="tknm-stat">
+          <div class="tknm-stat-val" id="tk-circ">—</div>
+          <div class="tknm-stat-lbl" data-i18n="land.tknm.stat3_lbl">QTR уже добыто (в обращении)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── CALCULATOR ───────────────────────────────────────────────────────── -->
+<section>
+  <div class="section">
+    <div class="reveal" style="text-align:center;margin-bottom:40px">
+      <div class="section-label" data-i18n="land.calc.label">◆ Доходность</div>
+      <h2 class="section-title" data-i18n-html="land.calc.title">Калькулятор<br><span style="color:var(--gold)">майнинга</span></h2>
+      <p class="section-sub" style="margin:0 auto" data-i18n="land.calc.sub">Сколько QTR ты заработаешь за день, неделю и месяц?</p>
+    </div>
+    <div class="calc-card reveal">
+      <div class="calc-grid">
+        <div class="calc-inputs">
+          <div class="calc-field">
+            <label data-i18n="land.calc.cores">Ядер CPU</label>
+            <input type="range" id="calc-cores" min="1" max="32" value="4" oninput="calcUpdate()">
+            <div class="calc-field-val"><span id="calc-cores-val">4</span> <span data-i18n="land.calc.cores_unit">ядра</span></div>
+          </div>
+          <div class="calc-field">
+            <label data-i18n="land.calc.speed">Хэшрейт на ядро</label>
+            <input type="range" id="calc-speed" min="10" max="500" value="50" step="10" oninput="calcUpdate()">
+            <div class="calc-field-val"><span id="calc-speed-val">50</span> kH/s</div>
+          </div>
+          <div class="calc-field">
+            <label data-i18n="land.calc.nethash">Сетевой хэшрейт (kH/s)</label>
+            <input type="range" id="calc-net" min="100" max="10000" value="1000" step="100" oninput="calcUpdate()">
+            <div class="calc-field-val"><span id="calc-net-val">1 000</span> kH/s <span data-i18n="land.calc.net_unit">сеть</span></div>
+          </div>
+        </div>
+        <div>
+          <div class="calc-results">
+            <div class="calc-result">
+              <span class="calc-result-lbl" data-i18n="land.calc.per_hour">💰 В час</span>
+              <span class="calc-result-val" id="cr-hour">—</span>
+            </div>
+            <div class="calc-result">
+              <span class="calc-result-lbl" data-i18n="land.calc.per_day">📅 В день</span>
+              <span class="calc-result-val" id="cr-day">—</span>
+            </div>
+            <div class="calc-result">
+              <span class="calc-result-lbl" data-i18n="land.calc.per_week">📆 В неделю</span>
+              <span class="calc-result-val" id="cr-week">—</span>
+            </div>
+            <div class="calc-result" style="border-color:var(--border2)">
+              <span class="calc-result-lbl" data-i18n="land.calc.per_month">🏆 В месяц</span>
+              <span class="calc-result-val" id="cr-month" style="color:var(--gold2);font-size:22px">—</span>
+            </div>
+          </div>
+          <div class="calc-note" id="calc-note">* Расчёт приблизительный. Зависит от сложности сети и хэшрейта других майнеров.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── DOWNLOAD ──────────────────────────────────────────────────────────── -->
+<section>
+  <div class="section">
+    <div class="dl-card reveal">
+      <div class="dl-left">
+        <div class="section-label" data-i18n="land.dl.label">◆ Майнер</div>
+        <h2 class="dl-title" data-i18n-html="land.dl.title">CPU Майнер<br><span style="color:var(--accent)">для Windows</span></h2>
+        <p class="dl-sub" data-i18n="land.dl.sub">Один .exe файл — без установки, без настройки. Пул уже зашит внутрь. Запустил, ввёл адрес — майнишь.</p>
+        <div class="dl-chips">
+          <span class="dl-chip">Windows 10/11</span>
+          <span class="dl-chip">SHA-256 PoW</span>
+          <span class="dl-chip" data-i18n="land.dl.chip_mt">Многопоточный</span>
+          <span class="dl-chip">16.7 QTR / блок</span>
+          <span class="dl-chip" data-i18n="land.dl.chip_pool">Авто-пул</span>
+        </div>
+      </div>
+      <div class="dl-right">
+        <a href="/download/qtr-pool-miner.exe" class="btn btn-purple btn-xl" data-i18n="land.dl.btn_dl">⬇ Скачать майнер .exe</a>
+        <a href="https://t.me/QatrolCoinBot" target="_blank" class="btn btn-tg btn-lg" data-i18n="land.dl.btn_tg">📱 Получить в Telegram</a>
+        <div class="dl-note">v1.2 · ~50 MB · Windows x64</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── ROADMAP ───────────────────────────────────────────────────────────── -->
+<section style="background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);">
+  <div class="section">
+    <div class="reveal" style="display:flex;gap:80px;flex-wrap:wrap;align-items:flex-start;">
+      <div style="flex:0 0 auto;max-width:380px;">
+        <div class="section-label" data-i18n="land.rm.label">◆ Дорожная карта</div>
+        <h2 class="section-title" data-i18n-html="land.rm.title">Что уже<br><span style="color:var(--gold)">сделано</span></h2>
+        <p class="section-sub" data-i18n="land.rm.sub">Проект активно развивается. Ранние майнеры получают монеты по минимальной сложности.</p>
+      </div>
+      <div class="roadmap" style="flex:1;min-width:280px;">
+        <div class="rm-item">
+          <div class="rm-dot done">✓</div>
+          <div class="rm-content">
+            <div class="rm-title" data-i18n="land.rm1.title">Запуск основной сети</div>
+            <div class="rm-sub" data-i18n="land.rm1.sub">Блокчейн, ноды, Genesis-блок с эмиссией 1 млрд QTR</div>
+            <span class="rm-badge done" data-i18n="land.rm1.badge">Апрель 2026 ✓</span>
+          </div>
+        </div>
+        <div class="rm-item">
+          <div class="rm-dot done">✓</div>
+          <div class="rm-content">
+            <div class="rm-title" data-i18n="land.rm2.title">Майнинг-пул + CPU майнер</div>
+            <div class="rm-sub" data-i18n="land.rm2.sub">Windows .exe майнер, пул с автовыплатами каждые 5 минут</div>
+            <span class="rm-badge done" data-i18n="land.rm2.badge">Апрель 2026 ✓</span>
+          </div>
+        </div>
+        <div class="rm-item">
+          <div class="rm-dot done">✓</div>
+          <div class="rm-content">
+            <div class="rm-title" data-i18n="land.rm3.title">Веб-кошелёк и обозреватель</div>
+            <div class="rm-sub" data-i18n="land.rm3.sub">Переводы, история, поиск блоков и транзакций</div>
+            <span class="rm-badge done" data-i18n="land.rm3.badge">Апрель 2026 ✓</span>
+          </div>
+        </div>
+        <div class="rm-item">
+          <div class="rm-dot done">✓</div>
+          <div class="rm-content">
+            <div class="rm-title" data-i18n="land.rm4.title">Telegram бот</div>
+            <div class="rm-sub" data-i18n="land.rm4.sub">Кошелёк, переводы, статистика, уведомления о блоках, реферальная система</div>
+            <span class="rm-badge done" data-i18n="land.rm4.badge">Апрель 2026 ✓</span>
+          </div>
+        </div>
+        <div class="rm-item">
+          <div class="rm-dot active">◆</div>
+          <div class="rm-content">
+            <div class="rm-title" data-i18n="land.rm5.title">Рост сообщества</div>
+            <div class="rm-sub" data-i18n="land.rm5.sub">Набор майнеров, Bitcointalk ANN, первые 1000 кошельков</div>
+            <span class="rm-badge active" data-i18n="land.rm5.badge">В процессе</span>
+          </div>
+        </div>
+        <div class="rm-item">
+          <div class="rm-dot">🔄</div>
+          <div class="rm-content">
+            <div class="rm-title" data-i18n="land.rm6.title">Linux майнер + Android</div>
+            <div class="rm-sub" data-i18n="land.rm6.sub">Майнер для Linux/macOS, мобильное приложение</div>
+            <span class="rm-badge soon">Q2 2026</span>
+          </div>
+        </div>
+        <div class="rm-item" style="padding-bottom:0">
+          <div class="rm-dot">🏦</div>
+          <div class="rm-content">
+            <div class="rm-title" data-i18n="land.rm7.title">Листинг на бирже</div>
+            <div class="rm-sub" data-i18n="land.rm7.sub">Торги QTR/USDT, ликвидность из genesis-резерва</div>
+            <span class="rm-badge soon">Q3–Q4 2026</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── FAQ ──────────────────────────────────────────────────────────────── -->
+<section>
+  <div class="section">
+    <div class="reveal">
+      <div class="section-label" data-i18n="land.faq.label">◆ Вопросы</div>
+      <h2 class="section-title" data-i18n-html="land.faq.title">Часто<br><span style="color:var(--gold)">спрашивают</span></h2>
+    </div>
+    <div class="faq reveal">
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          <span data-i18n="land.faq.q1">Нужна ли видеокарта или ASIC для майнинга?</span>
+          <span class="faq-arrow">▾</span>
+        </div>
+        <div class="faq-a" data-i18n="land.faq.a1">Нет. QTR майнится на обычном процессоре (CPU). Майнер использует все ядра CPU автоматически. Подойдёт любой ноутбук или ПК с Windows 10/11.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          <span data-i18n="land.faq.q2">Как быстро приходят монеты после запуска?</span>
+          <span class="faq-arrow">▾</span>
+        </div>
+        <div class="faq-a" data-i18n="land.faq.a2">Пул распределяет выплаты каждые 5 минут пропорционально шарам. Уже через несколько минут после запуска майнера ты увидишь первые QTR на балансе.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          <span data-i18n="land.faq.q3">Сколько QTR можно добыть?</span>
+          <span class="faq-arrow">▾</span>
+        </div>
+        <div class="faq-a" data-i18n="land.faq.a3">За каждый найденный блок пул получает 16.7 QTR и делит между активными майнерами пропорционально хэшрейту. Чем больше у тебя ядер CPU — тем больше доля. Сложность автоматически подстраивается под общий хэшрейт сети, целевое время блока — около 10 минут.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          <span data-i18n="land.faq.q4">Майнер безопасен? Это не вирус?</span>
+          <span class="faq-arrow">▾</span>
+        </div>
+        <div class="faq-a" data-i18n="land.faq.a4">Майнер — это open-source Node.js приложение, собранное в .exe через pkg. Оно использует только CPU и HTTP для связи с пулом. Антивирусы иногда ложно реагируют на self-contained .exe файлы — это нормально для подобного ПО.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          <span data-i18n="land.faq.q5">Когда QTR будет на бирже?</span>
+          <span class="faq-arrow">▾</span>
+        </div>
+        <div class="faq-a" data-i18n="land.faq.a5">Листинг запланирован на Q3–Q4 2026. Genesis-резерв (~380M QTR) будет использован для обеспечения ликвидности. Следи за новостями в Telegram канале.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          <span data-i18n="land.faq.q6">Можно майнить с нескольких компьютеров на один адрес?</span>
+          <span class="faq-arrow">▾</span>
+        </div>
+        <div class="faq-a" data-i18n="land.faq.a6">Да. Просто запусти майнер на каждом ПК с одним и тем же адресом кошелька. Пул суммирует все шары от одного адреса и выплачивает пропорционально общему хэшрейту.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── COMMUNITY ─────────────────────────────────────────────────────────── -->
+<section>
+  <div class="section">
+    <div class="community-card reveal">
+      <div class="community-left">
+        <div class="section-label" data-i18n="land.comm.label">◆ Сообщество</div>
+        <h2 class="community-title" data-i18n-html="land.comm.title">Присоединяйся к<br><span style="color:#229ed9">QatrolCoin</span></h2>
+        <p class="community-sub" style="margin-bottom:28px;" data-i18n="land.comm.sub">Новости, обновления, статистика сети и общение с другими майнерами — всё в нашем Telegram канале.</p>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+          <a href="https://t.me/QatrolCoin" target="_blank" class="btn btn-tg btn-lg" data-i18n="land.comm.btn_tg">📢 Подписаться на канал</a>
+          <a href="/login" class="btn btn-gold btn-lg" data-i18n="land.create_wallet">✦ Создать кошелёк</a>
+        </div>
+      </div>
+      <div class="tg-icon">✈️</div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── FOOTER ─────────────────────────────────────────────────────────────── -->
+<footer class="footer">
+  <div class="footer-inner">
+    <div>
+      <div class="footer-logo"><span>◆</span> QATROL COIN</div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:6px;">QTR · 1,000,000,000 · SHA-256</div>
+    </div>
+    <div class="footer-links">
+      <a href="/app" class="footer-link" data-i18n="nav.wallet">Кошелёк</a>
+      <a href="/app" class="footer-link" data-i18n="land.footer.explorer">Обозреватель</a>
+      <a href="https://t.me/QatrolCoin" target="_blank" class="footer-link">Telegram</a>
+      <a href="#how" class="footer-link" data-i18n="land.nav.mining">Майнинг</a>
+    </div>
+    <div class="footer-right">
+      <span data-i18n="land.footer.network">Сеть запущена</span><br>
+      <span id="footer-blocks">— блоков</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+const API = '/api';
+
+async function fetchStats() {
+  try {
+    const r = await fetch(API + '/stats');
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
+}
+
+async function fetchChain() {
+  try {
+    const r = await fetch(API + '/chain?limit=6');
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
+}
+
+function fmtHash(h) {
+  if (!h) return '—';
+  if (h >= 1e9) return (h/1e9).toFixed(1)+' GH/s';
+  if (h >= 1e6) return (h/1e6).toFixed(1)+' MH/s';
+  if (h >= 1e3) return (h/1e3).toFixed(1)+' kH/s';
+  return h+' H/s';
+}
+
+function timeAgo(ts) {
+  const s = Math.floor((Date.now()-ts)/1000);
+  if (s < 60) return s+(T('time.sec')||'с');
+  if (s < 3600) return Math.floor(s/60)+(T('time.min')||'м');
+  return Math.floor(s/3600)+(T('time.hour')||'ч');
+}
+
+function short(s, n=8) { return s ? s.slice(0,n)+'…'+s.slice(-4) : ''; }
+
+function renderBlock(b) {
+  const fee = b.transactions?.find(t => t.from === 'SYSTEM_FEE');
+  return `<div class="l-block" onclick="window.location='/app'">
+    <div class="l-block-top">
+      <div class="l-block-num">#${b.index}</div>
+      <div class="l-block-age">${timeAgo(b.timestamp)} ${T('time.ago')||'назад'}</div>
+    </div>
+    <div class="l-block-hash">⛓ ${b.hash}</div>
+    <div class="l-block-meta">
+      <span class="badge">${b.transactions?.length||0} ${T('time.txs_abbr')||'тр.'}</span>
+      <span>diff:${b.difficulty}</span>
+      <span>nonce:${(b.nonce||0).toLocaleString('ru')}</span>
+      ${fee ? `<span style="color:var(--gold)">+${fee.amount} QTR</span>` : ''}
+    </div>
+  </div>`;
+}
+
+async function updateStats() {
+  const s = await fetchStats();
+  if (!s || s.error) return;
+  const blocks = s.blocks || 0;
+  const _loc = (typeof T==='function'&&T('time.locale'))||'ru';
+  document.getElementById('hs-blocks').textContent = blocks.toLocaleString(_loc);
+  document.getElementById('lb-blocks').textContent = blocks.toLocaleString(_loc);
+  document.getElementById('lb-hash').textContent = fmtHash(s.hashrate||0);
+  document.getElementById('lb-diff').textContent = s.difficulty || '—';
+  document.getElementById('lb-pending').textContent = s.pendingTx || 0;
+  const circ = parseFloat(s.circulatingSupply||0);
+  document.getElementById('lb-circ').textContent = circ > 1e6
+    ? (circ/1e6).toFixed(1)+'M'
+    : circ.toLocaleString('ru');
+  document.getElementById('footer-blocks').textContent = blocks.toLocaleString('ru') + ' ' + (T('stats.blocks')||'блоков');
+}
+
+async function updateBlocks() {
+  const d = await fetchChain();
+  const el = document.getElementById('blocksGrid');
+  if (!d?.chain?.length) {
+    el.innerHTML = '<div class="blocks-empty">' + (T('land.blocks.empty')||'Нода недоступна или блоков пока нет') + '</div>';
+    return;
+  }
+  el.innerHTML = [...d.chain].reverse().map(renderBlock).join('');
+}
+
+function initReveal() {
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+  }, { threshold: 0.1 });
+  document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+}
+
+function toggleMenu() {
+  document.getElementById('mobileMenu').classList.toggle('open');
+}
+
+// Закрыть меню при клике вне
+document.addEventListener('click', e => {
+  if (!e.target.closest('#mobileMenu') && !e.target.closest('#ham'))
+    document.getElementById('mobileMenu').classList.remove('open');
+});
+
+// ── Mining calculator ──────────────────────────────────────────────────────
+let liveNetHashrate = 0;
+
+function calcUpdate() {
+  const cores    = parseInt(document.getElementById('calc-cores').value);
+  const speedKH  = parseInt(document.getElementById('calc-speed').value);
+  const netKH    = parseInt(document.getElementById('calc-net').value);
+
+  document.getElementById('calc-cores-val').textContent = cores;
+  document.getElementById('calc-speed-val').textContent = speedKH;
+  document.getElementById('calc-net-val').textContent = netKH.toLocaleString((typeof T==='function'&&T('time.locale'))||'ru');
+
+  const myHashrate  = cores * speedKH * 1000;   // H/s
+  const netHashrate = netKH * 1000;             // H/s
+  const share       = netHashrate > 0 ? myHashrate / netHashrate : 0;
+
+  const BLOCK_REWARD  = 16.7;
+  const TARGET_SEC    = 20; // ~20 sec target
+  const blocksPerHour = 3600 / TARGET_SEC;
+
+  const qtrHour  = share * BLOCK_REWARD * blocksPerHour;
+  const qtrDay   = qtrHour * 24;
+  const qtrWeek  = qtrDay * 7;
+  const qtrMonth = qtrDay * 30;
+
+  const fmt = (v) => v >= 1 ? v.toFixed(2) + ' QTR' : v.toFixed(4) + ' QTR';
+  document.getElementById('cr-hour').textContent  = fmt(qtrHour);
+  document.getElementById('cr-day').textContent   = fmt(qtrDay);
+  document.getElementById('cr-week').textContent  = fmt(qtrWeek);
+  document.getElementById('cr-month').textContent = fmt(qtrMonth);
+
+  const sharePct = (share * 100).toFixed(1);
+  document.getElementById('calc-note').textContent =
+    (T('land.calc.share_note') || 'Твоя доля сети:') + ` ${sharePct}% · ${(myHashrate/1000).toFixed(0)} kH/s ${T('land.calc.of')||'из'} ${netKH.toLocaleString('ru')} kH/s · ${T('land.calc.block_time')||'Блок'} ~${TARGET_SEC}с`;
+}
+
+// Подтягиваем живой хэшрейт из API
+async function initCalc() {
+  try {
+    const r = await fetch('/api/stats');
+    const s = await r.json();
+    if (s.hashrate > 0) {
+      const netKH = Math.round(s.hashrate / 1000);
+      const slider = document.getElementById('calc-net');
+      if (slider) {
+        slider.max = Math.max(10000, netKH * 3);
+        slider.value = netKH;
+      }
+      liveNetHashrate = netKH;
+    }
+  } catch {}
+  calcUpdate();
+}
+initCalc();
+
+function toggleFaq(el) {
+  el.parentElement.classList.toggle('open');
+}
+
+function animateBars() {
+  document.querySelectorAll('.tknm-bar-fill').forEach(bar => {
+    const w = bar.dataset.w;
+    if (w) bar.style.width = w + '%';
+  });
+}
+
+// Обновляем токеномику из апи
+async function updateTokenomics() {
+  const s = await fetchStats();
+  if (!s || s.error) return;
+  const circ = parseFloat(s.circulatingSupply || 0);
+  const el = document.getElementById('tk-circ');
+  if (el) el.textContent = circ > 1e6
+    ? (circ / 1e6).toFixed(2) + 'M QTR'
+    : circ.toLocaleString('ru') + ' QTR';
+}
+
+// Запускаем анимацию баров при попадании в viewport
+const barObs = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) animateBars(); });
+}, { threshold: 0.3 });
+const barsEl = document.querySelector('.tknm-bars');
+if (barsEl) barObs.observe(barsEl);
+
+// Init
+initReveal();
+setInterval(updateStats, 10_000);
+setInterval(updateBlocks, 15_000);
+</script>
+<script src="/i18n.js"></script>
+<script>setTimeout(function(){ updateStats(); updateBlocks(); updateTokenomics(); }, 0);</script>
+</body>
+</html>

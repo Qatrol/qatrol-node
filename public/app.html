@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>QTR — Кошелёк</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+.layout{display:flex;min-height:100vh;position:relative;z-index:1}
+.sidebar{width:220px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto;flex-shrink:0}
+.logo{padding:22px 20px 18px;border-bottom:1px solid var(--border)}
+.logo-text{font-size:22px;font-weight:800;letter-spacing:-1px}
+.logo-k{color:var(--gold)}.logo-dot{color:var(--gold3)}
+.logo-sub{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px;letter-spacing:2px;text-transform:uppercase}
+.nav{flex:1;padding:10px 0}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;color:var(--muted);font-size:14px;font-weight:600;transition:all .15s;border-left:2px solid transparent;text-decoration:none}
+.nav-item:hover{color:var(--text);background:rgba(108,99,255,.05)}
+.nav-item.active{color:var(--accent);border-left-color:var(--accent);background:rgba(108,99,255,.08)}
+.nav-icon{font-size:15px;width:18px;text-align:center}
+.nav-sep{height:1px;background:var(--border);margin:8px 20px}
+.sidebar-footer{padding:14px 20px;border-top:1px solid var(--border)}
+.node-row{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:8px}
+.dot-live{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:blink 2s infinite;flex-shrink:0}
+.dot-dead{width:7px;height:7px;border-radius:50%;background:var(--red);flex-shrink:0}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
+.main{flex:1;padding:32px;overflow-y:auto;max-width:960px}
+.page{display:none}.page.active{display:block;animation:fadeIn .2s ease}
+.page-header{margin-bottom:28px}
+.page-title{font-size:26px;font-weight:800}
+.page-sub{color:var(--muted);font-size:14px;margin-top:4px}
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:13px;padding:16px}
+.stat-label{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:6px}
+.stat-val{font-family:var(--mono);font-size:21px;font-weight:700;color:var(--accent);line-height:1}
+.stat-val.green{color:var(--green)}.stat-val.gold{color:var(--accent2)}.stat-val.blue{color:var(--blue)}
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+.chart-card{background:var(--bg2);border:1px solid var(--border);border-radius:13px;padding:20px}
+.chart-title{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:14px}
+.chart-wrap{position:relative;height:160px;width:100%}
+.wallet-hero{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap}
+.wallet-left{flex:1;min-width:220px}
+.wallet-name{font-size:13px;color:var(--muted);font-weight:600;margin-bottom:4px}
+.wallet-addr{font-family:var(--mono);font-size:12px;color:var(--muted);cursor:pointer;word-break:break-all;margin-bottom:12px}
+.wallet-addr:hover{color:var(--accent)}
+.wallet-balance{font-family:var(--mono);font-size:38px;font-weight:700;color:var(--green);line-height:1}
+.wallet-ticker{font-size:16px;color:var(--muted);font-weight:400;margin-left:6px}
+.wallet-pending{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:6px}
+.wallet-btns{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+.qr-wrap{background:#fff;border-radius:12px;padding:10px;display:inline-block}
+.tx-list{display:flex;flex-direction:column;gap:8px}
+.tx-item{background:var(--bg3);border:1px solid var(--border);border-radius:11px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;transition:border-color .15s;gap:12px}
+.tx-item:hover{border-color:var(--border2)}
+.tx-dir{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:2px}
+.tx-dir.in{color:var(--green)}.tx-dir.out{color:var(--red)}.tx-dir.pend{color:var(--accent2)}
+.tx-peer{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.tx-memo{font-size:12px;color:var(--muted);font-style:italic;margin-top:2px}
+.tx-right{text-align:right;flex-shrink:0}
+.tx-amount{font-family:var(--mono);font-size:15px;font-weight:700}
+.tx-amount.in{color:var(--green)}.tx-amount.out{color:var(--red)}
+.tx-meta{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px}
+.block-list{display:flex;flex-direction:column;gap:8px}
+.block-item{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px;cursor:pointer;transition:all .15s}
+.block-item:hover{border-color:var(--accent);background:var(--bg3)}
+.block-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.block-num{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--accent)}
+.block-age{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.block-hash{font-family:var(--mono);font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:7px}
+.block-meta{display:flex;gap:12px;font-family:var(--mono);font-size:12px;color:var(--muted);flex-wrap:wrap}
+.pager{display:flex;gap:7px;align-items:center;justify-content:center;padding:18px 0;flex-wrap:wrap}
+.pager-btn{padding:6px 13px;border-radius:7px;border:1px solid var(--border);background:var(--bg3);color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:12px;transition:all .15s}
+.pager-btn:hover{border-color:var(--accent);color:var(--accent)}
+.pager-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.search-bar{display:flex;gap:10px;margin-bottom:20px}
+.search-bar .input{flex:1}
+.fee-row{background:var(--bg3);border-radius:9px;padding:11px 15px;font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:16px}
+.fee-row strong{color:var(--text)}
+.scan-row{display:flex;gap:8px}
+.scan-row .input{flex:1}
+.mp-summary{display:flex;gap:20px;font-family:var(--mono);font-size:13px;padding:14px 18px}
+.peers-list{display:flex;flex-direction:column;gap:6px}
+.peer-item{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-family:var(--mono);font-size:12px;display:flex;justify-content:space-between}
+.hamburger{display:none;position:fixed;top:12px;left:12px;z-index:200;background:var(--bg2);border:1px solid var(--border);border-radius:9px;width:40px;height:40px;align-items:center;justify-content:center;cursor:pointer;flex-direction:column;gap:5px;padding:10px}
+.hamburger span{display:block;width:20px;height:2px;background:var(--text);border-radius:2px;transition:all .2s}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:155}
+.sidebar-overlay.open{display:block}
+.miner-steps{background:var(--bg3);border-radius:9px;padding:14px;font-family:var(--mono);font-size:12px;color:var(--muted);line-height:2}
+.lb-row{display:flex;align-items:center;gap:14px;padding:12px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;margin-bottom:8px;transition:border-color .15s}
+.lb-row:hover{border-color:var(--border2)}
+.lb-row.me{border-color:var(--accent);background:rgba(108,99,255,.06)}
+.lb-medal{font-size:20px;width:28px;text-align:center;flex-shrink:0}
+.lb-info{flex:1;min-width:0}
+.lb-addr{font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:3px}
+.lb-meta{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.lb-right{text-align:right;flex-shrink:0}
+.lb-shares{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--accent)}
+.lb-pct{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.nav-icon{font-variant-emoji:text}
+@media(max-width:720px){
+  .hamburger{display:flex}
+  .layout{z-index:auto}
+  .sidebar{position:fixed;left:-240px;top:0;height:100vh;z-index:160;transition:left .25s;width:220px}
+  .sidebar.open{left:0}
+  .main{padding:20px 14px;padding-top:64px}
+  .stats-grid{grid-template-columns:repeat(2,1fr)}
+  .chart-grid{grid-template-columns:1fr}
+  .wallet-hero{flex-direction:column-reverse}
+  .lb-row{gap:10px}
+}
+</style>
+</head>
+<body>
+<div class="hamburger" id="hamburger" onclick="toggleSidebar()"><span></span><span></span><span></span></div>
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="logo">
+      <div class="logo-text"><span class="logo-k">Q</span>ATR<span class="logo-dot">◆</span></div>
+      <div class="logo-sub">Blockchain v2.0</div>
+    </div>
+    <nav class="nav">
+      <a class="nav-item active" data-page="dashboard" href="#"><span class="nav-icon">◈</span><span data-i18n="app.nav.dashboard">Обзор</span></a>
+      <a class="nav-item" data-page="stats" href="#"><span class="nav-icon">◎</span><span data-i18n="nav.stats">Статистика</span></a>
+      <a class="nav-item" data-page="wallet" href="#"><span class="nav-icon">◉</span><span data-i18n="nav.wallet">Кошелёк</span></a>
+      <a class="nav-item" data-page="send" href="#"><span class="nav-icon">↗&#xFE0E;</span><span data-i18n="app.nav.send">Отправить</span></a>
+      <a class="nav-item" data-page="receive" href="#"><span class="nav-icon">↙&#xFE0E;</span><span data-i18n="app.nav.receive">Получить</span></a>
+      <div class="nav-sep"></div>
+      <a class="nav-item" data-page="mining" href="#"><span class="nav-icon">⛏&#xFE0E;</span><span data-i18n="app.nav.mining">Майнинг</span></a>
+      <a class="nav-item" data-page="explorer" href="#"><span class="nav-icon">⊞&#xFE0E;</span><span data-i18n="app.nav.explorer">Обозреватель</span></a>
+      <a class="nav-item" data-page="stats" href="#"><span class="nav-icon">▲&#xFE0E;</span><span data-i18n="nav.stats">Статистика</span></a>
+      <a class="nav-item" data-page="mempool" href="#"><span class="nav-icon">⧖&#xFE0E;</span><span data-i18n="app.nav.mempool">Очередь</span></a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="node-row"><div class="dot-dead" id="nodeDot"></div><span id="nodeText">...</span></div>
+      <button class="btn btn-ghost btn-sm btn-full" onclick="doLogout()" data-i18n="app.logout">Выйти</button>
+    </div>
+  </aside>
+  <main class="main">
+
+    <div class="page active" id="page-dashboard">
+      <div class="page-header"><div class="page-title" data-i18n="app.dash.title">Обзор сети</div><div class="page-sub" data-i18n="app.dash.sub">QTR Blockchain — фиксированная эмиссия 1,000,000,000</div></div>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-label" data-i18n="stats.blocks">Блоков</div><div class="stat-val" id="s-blocks">—</div></div>
+        <div class="stat-card"><div class="stat-label" data-i18n="stats.diff">Сложность</div><div class="stat-val blue" id="s-diff">—</div></div>
+        <div class="stat-card"><div class="stat-label" data-i18n="app.dash.queued">В очереди</div><div class="stat-val gold" id="s-pend">—</div></div>
+        <div class="stat-card"><div class="stat-label" data-i18n="stats.hashrate">Хэшрейт (расч.)</div><div class="stat-val" id="s-hash">—</div></div>
+        <div class="stat-card"><div class="stat-label" data-i18n="stats.circ">В обращении</div><div class="stat-val green" id="s-circ">—</div></div>
+        <div class="stat-card"><div class="stat-label" data-i18n="app.dash.fee">Комиссия</div><div class="stat-val" id="s-fee">—</div></div>
+        <div class="stat-card"><div class="stat-label" data-i18n="app.dash.valid">Цепь валидна</div><div class="stat-val green" id="s-valid">—</div></div>
+        <div class="stat-card"><div class="stat-label" data-i18n="app.dash.uptime">Аптайм</div><div class="stat-val" id="s-uptime">—</div></div>
+      </div>
+      <div class="card"><div class="label" style="margin-bottom:14px" data-i18n="app.dash.recent_blocks">Последние блоки</div><div class="block-list" id="d-blocks"><div class="empty" data-i18n="common.loading">Загрузка...</div></div></div>
+    </div>
+
+    <div class="page" id="page-stats">
+      <div class="page-header"><div class="page-title" data-i18n="nav.stats">Статистика</div><div class="page-sub" data-i18n="app.stats.sub">Графики сети в реальном времени</div></div>
+      <div class="chart-grid">
+        <div class="chart-card"><div class="chart-title">Hashrate (kH/s)</div><div class="chart-wrap"><canvas id="chart-hashrate"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title" data-i18n="app.stats.chart_blocktime">Время блоков (сек)</div><div class="chart-wrap"><canvas id="chart-blocktime"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title" data-i18n="app.stats.chart_txcount">Транзакций в блоке</div><div class="chart-wrap"><canvas id="chart-txcount"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title" data-i18n="stats.diff">Сложность</div><div class="chart-wrap"><canvas id="chart-diff"></canvas></div></div>
+      </div>
+      <div class="card card-sm" style="margin-top:4px">
+        <div class="label" style="margin-bottom:10px" data-i18n="app.stats.emission">Эмиссия QTR</div>
+        <div style="font-family:var(--mono);font-size:13px;margin-bottom:8px">
+          <span data-i18n="app.stats.total">Всего:</span> <span style="color:var(--green)">1,000,000,000 QTR</span> (<span data-i18n="app.stats.fixed">фиксировано навсегда</span>) &nbsp;·&nbsp;
+          <span data-i18n="stats.circ">В обращении:</span> <span id="stat-circ" style="color:var(--accent2)">—</span> (<span id="stat-pct">—</span>)
+        </div>
+        <div style="background:var(--bg3);border-radius:8px;overflow:hidden;height:8px;margin:8px 0">
+          <div id="supply-bar" style="height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:8px;transition:width .5s;width:0%"></div>
+        </div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:4px">
+          <span data-i18n="app.stats.genesis_wallet">На genesis-кошельке:</span> <span id="stat-genesis">—</span> QTR
+        </div>
+      </div>
+    </div>
+
+    <div class="page" id="page-wallet">
+      <div class="page-header"><div class="page-title" data-i18n="nav.wallet">Кошелёк</div><div class="page-sub" data-i18n="app.wallet.sub">Баланс и история</div></div>
+      <div class="card" style="margin-bottom:16px">
+        <div class="wallet-hero">
+          <div class="wallet-left">
+            <div class="wallet-name" id="w-label">—</div>
+            <div class="wallet-addr" id="w-addr" onclick="copyText(this.textContent)">—</div>
+            <div class="wallet-balance" id="w-balance">—<span class="wallet-ticker">QTR</span></div>
+            <div class="wallet-pending"><span data-i18n="app.wallet.pending">В обработке:</span> <span id="w-pending" style="color:var(--accent2)">0</span> QTR</div>
+            <div class="wallet-btns">
+              <button class="btn btn-primary btn-sm" onclick="nav('send')" data-i18n="app.nav.send">↗ Отправить</button>
+              <button class="btn btn-ghost btn-sm" onclick="nav('receive')" data-i18n="app.nav.receive">↙ Получить</button>
+              <button class="btn btn-ghost btn-sm" onclick="openModal('mnemonic')" data-i18n="app.wallet.mnemonic_btn">🔑 Мнемоник</button>
+            </div>
+          </div>
+          <div class="qr-wrap" id="w-qr"></div>
+        </div>
+      </div>
+      <div class="card"><div class="label" style="margin-bottom:14px" data-i18n="app.wallet.history">История транзакций</div><div class="tx-list" id="w-history"><div class="empty" data-i18n="common.loading">Загрузка...</div></div></div>
+    </div>
+
+    <div class="page" id="page-send">
+      <div class="page-header"><div class="page-title" data-i18n="app.send.title">Отправить QTR</div><div class="page-sub" data-i18n="app.send.sub">Транзакция подписывается ECDSA ключом</div></div>
+      <div class="card">
+        <div class="field"><label class="label" data-i18n="app.send.from">От</label><input class="input" id="s-from" readonly></div>
+        <div class="field"><label class="label" data-i18n="app.send.to">Получатель</label><div class="scan-row"><input class="input" id="s-to" placeholder="K..." data-i18n-placeholder="app.send.to_ph"><button class="btn btn-ghost btn-icon" onclick="openModal('scanQR')" title="Вставить из QR">⬛</button></div></div>
+        <div class="row2">
+          <div class="field"><label class="label" data-i18n="app.send.amount">Сумма (QTR)</label><input class="input" id="s-amount" type="number" placeholder="0.000000" min="0.000001" step="0.000001" oninput="updateFee()"></div>
+          <div class="field"><label class="label" data-i18n="app.send.fee_label">Комиссия (авто 0.1%)</label><input class="input" id="s-fee" readonly></div>
+        </div>
+        <div class="field"><label class="label" data-i18n="app.send.memo">Заметка</label><input class="input" id="s-memo" data-i18n-placeholder="app.send.memo_ph" placeholder="За что платёж..."></div>
+        <div class="field"><label class="label" data-i18n="app.send.password">Пароль (для подписи транзакции)</label><input class="input" type="password" id="s-pass" data-i18n-placeholder="app.send.pass_ph" placeholder="Ваш пароль от кошелька"></div>
+        <div class="fee-row"><span data-i18n="app.send.total">Итого:</span> <strong id="s-total">0</strong> QTR &nbsp;·&nbsp; <span data-i18n="app.send.fee_note">Комиссия идёт майнеру блока</span></div>
+        <button class="btn btn-primary btn-full" onclick="doSend()" data-i18n="app.send.btn">Подписать и отправить ↗</button>
+      </div>
+    </div>
+
+    <div class="page" id="page-receive">
+      <div class="page-header"><div class="page-title" data-i18n="app.recv.title">Получить QTR</div><div class="page-sub" data-i18n="app.recv.sub">Покажи QR или скопируй адрес</div></div>
+      <div class="card" style="text-align:center;max-width:420px">
+        <div style="display:inline-block;background:#fff;border-radius:14px;padding:14px;margin-bottom:20px" id="recv-qr"></div>
+        <div class="label" style="margin-bottom:8px" data-i18n="app.recv.your_addr">Ваш адрес</div>
+        <div class="key-box" id="recv-addr">—<button class="copy-btn" onclick="copyEl('recv-addr')" data-i18n="common.copy">Копировать</button></div>
+        <div class="divider"></div>
+        <div style="font-family:var(--mono);font-size:12px;color:var(--muted)" data-i18n="app.recv.hint">QR содержит адрес кошелька (ECDSA secp256k1)</div>
+      </div>
+    </div>
+
+    <div class="page" id="page-explorer">
+      <div class="page-header"><div class="page-title" data-i18n="app.nav.explorer">Обозреватель</div><div class="page-sub" data-i18n="app.exp.sub">Все блоки и транзакции</div></div>
+      <div class="search-bar"><input class="input" id="exp-search" data-i18n-placeholder="app.exp.search_ph" placeholder="Хэш блока · ID транзакции · адрес..." onkeydown="if(event.key==='Enter')doSearch()"><button class="btn btn-primary" onclick="doSearch()" data-i18n="app.exp.search_btn">Найти</button></div>
+      <div class="block-list" id="exp-list"><div class="empty" data-i18n="common.loading">Загрузка...</div></div>
+      <div class="pager" id="exp-pager"></div>
+    </div>
+
+    <div class="page" id="page-mempool">
+      <div class="page-header"><div class="page-title" data-i18n="app.mempool.title">Очередь транзакций</div><div class="page-sub" data-i18n="app.mempool.sub">Ожидают подтверждения майнером</div></div>
+      <div class="card card-sm" style="margin-bottom:16px"><div class="mp-summary"><span><span data-i18n="app.mempool.queued">В очереди:</span> <strong style="color:var(--accent2)" id="mp-cnt">0</strong></span><span><span data-i18n="app.mempool.fees">Комиссий:</span> <strong style="color:var(--green)" id="mp-fees">0</strong> QTR</span></div></div>
+      <div class="tx-list" id="mp-list"><div class="empty" data-i18n="app.mempool.empty">Очередь пуста</div></div>
+    </div>
+
+    <div class="page" id="page-mining">
+      <div class="page-header"><div class="page-title" data-i18n="app.nav.mining">Майнинг</div><div class="page-sub" data-i18n="app.mining.sub">Статистика пула, топ майнеров и загрузка майнера</div></div>
+      <div class="stats-grid" style="margin-bottom:20px">
+        <div class="stat-card"><div class="stat-label" data-i18n="stats.workers">Активных майнеров</div><div class="stat-val" id="m-workers">—</div></div>
+        <div class="stat-card"><div class="stat-label" data-i18n="app.mining.total_shares">Всего шар</div><div class="stat-val green" id="m-shares">—</div></div>
+        <div class="stat-card"><div class="stat-label" data-i18n="app.mining.cur_block">Текущий блок</div><div class="stat-val blue" id="m-job">—</div></div>
+        <div class="stat-card"><div class="stat-label" data-i18n="app.mining.pool_fee">Комиссия пула</div><div class="stat-val gold" id="m-fee">—</div></div>
+      </div>
+      <div class="card" style="margin-bottom:16px">
+        <div class="label" style="margin-bottom:14px" data-i18n="app.mining.my_stats">Мои результаты</div>
+        <div id="m-my-stats"><div class="empty" data-i18n="app.mining.start_hint">Запустите майнер чтобы увидеть статистику</div></div>
+      </div>
+      <div class="card" style="margin-bottom:16px;border-color:var(--accent);background:linear-gradient(135deg,rgba(108,99,255,.06),rgba(244,194,74,.04))">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+          <div>
+            <div style="font-size:17px;font-weight:800;margin-bottom:5px" data-i18n="app.mining.miner_title">⛏ CPU Майнер для Windows</div>
+            <div style="font-family:var(--mono);font-size:12px;color:var(--muted)" data-i18n="app.mining.miner_desc">Многопоточный · SHA-256 PoW · Авто-подключение к пулу · 16.7 QTR за блок</div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <a href="/download/qtr-pool-miner.exe" class="btn btn-primary" data-i18n="app.mining.dl_btn">↓ Скачать .exe</a>
+            <a href="https://t.me/QatrolCoin" target="_blank" class="btn btn-ghost">Telegram</a>
+          </div>
+        </div>
+        <div class="miner-steps">
+          <div data-i18n="app.mining.step1">1. Скачай майнер выше и запусти .exe</div>
+          <div><span data-i18n="app.mining.step2">2. Введи адрес кошелька:</span> <span style="color:var(--accent)" id="m-addr-hint">—</span></div>
+          <div data-i18n="app.mining.step3">3. Пул подключится автоматически — майнинг начнётся</div>
+          <div data-i18n="app.mining.step4">4. Выплаты каждые 5 минут пропорционально шарам</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="label" style="margin-bottom:14px" data-i18n="app.mining.top_miners">Топ майнеров</div>
+        <div id="m-leaderboard"><div class="empty" data-i18n="common.loading">Загрузка...</div></div>
+      </div>
+    </div>
+
+    <div class="page" id="page-network">
+      <div class="page-header"><div class="page-title" data-i18n="app.network.title">Сеть</div><div class="page-sub" data-i18n="app.network.sub">P2P пиры и статус синхронизации</div></div>
+      <div class="card" style="margin-bottom:16px">
+        <div class="label" style="margin-bottom:12px" data-i18n="app.network.peers">Подключённые пиры</div>
+        <div class="peers-list" id="peers-list"><div class="empty" data-i18n="app.network.no_peers">Пиров нет</div></div>
+      </div>
+      <div class="card">
+        <div class="label" style="margin-bottom:12px" data-i18n="app.network.node_info">Информация о ноде</div>
+        <div id="node-info-box"></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+<div class="modal-overlay" id="modal" onclick="if(event.target===this)closeModal()"><div class="modal" id="modal-body"></div></div>
+<div class="toast" id="toast"></div>
+<script src="app.js"></script>
+<script src="/i18n.js"></script>
+</body>
+</html>

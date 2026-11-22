@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>QTR — Вход</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.login-page{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;position:relative;z-index:1}
+.login-box{width:100%;max-width:440px}
+.logo{text-align:center;margin-bottom:36px}
+.logo-text{font-size:44px;font-weight:800;letter-spacing:-2px}
+.logo-k{color:var(--gold)}.logo-dot{color:var(--gold3)}
+.logo-sub{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:3px;color:var(--muted);margin-top:6px}
+.tabs{display:flex;background:var(--bg3);border-radius:10px;padding:4px;margin-bottom:24px}
+.tab{flex:1;padding:9px;text-align:center;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);transition:all .18s}
+.tab.active{background:var(--bg2);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.form-section{display:none}.form-section.active{display:block;animation:fadeIn .2s ease}
+.err-msg{background:rgba(255,100,100,.1);border:1px solid rgba(255,100,100,.25);border-radius:8px;padding:10px 14px;color:var(--red);font-size:13px;font-family:var(--mono);margin-bottom:14px;display:none}
+.err-msg.show{display:block}
+.success-box{background:rgba(60,214,140,.08);border:1px solid rgba(60,214,140,.25);border-radius:12px;padding:20px;display:none}
+.success-box.show{display:block}
+.mnemonic-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:12px 0}
+.mnemonic-word{background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:6px 8px;font-family:var(--mono);font-size:12px;text-align:center}
+.mnemonic-word span{display:block;font-size:10px;color:var(--muted);margin-bottom:2px}
+.node-info{text-align:center;margin-top:18px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.dot-sm{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:5px;vertical-align:middle}
+</style>
+</head>
+<body>
+<div class="login-page">
+  <div class="login-box">
+    <div style="text-align:center;margin-bottom:16px">
+      <a href="/" style="color:var(--muted);font-size:13px;text-decoration:none;font-family:var(--mono);letter-spacing:.5px;transition:color .2s" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--muted)'" data-i18n="login.back">← На главную</a>
+    </div>
+    <div class="logo">
+      <div class="logo-text"><span class="logo-k">Q</span>ATR<span class="logo-dot">◆</span></div>
+      <div class="logo-sub">Decentralized · 1B Supply · ECDSA</div>
+    </div>
+    <div class="card">
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('login')" data-i18n="login.tab">Войти</div>
+        <div class="tab" onclick="switchTab('register')" data-i18n="login.register">Создать</div>
+        <div class="tab" onclick="switchTab('import')" data-i18n="login.import">Импорт</div>
+        <div class="tab" onclick="switchTab('mnemonic')" data-i18n="login.mnemonic">Мнемоник</div>
+      </div>
+
+      <div class="form-section active" id="tab-login">
+        <div class="err-msg" id="login-err"></div>
+        <div class="field"><label class="label" data-i18n="login.address">Адрес кошелька</label><input class="input" id="login-addr" data-i18n-placeholder="login.addr_ph" placeholder="K..." autocomplete="username"></div>
+        <div class="field"><label class="label" data-i18n="login.password">Пароль</label><input class="input" type="password" id="login-pass" data-i18n-placeholder="login.pass_ph" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
+        <button class="btn btn-primary btn-full" id="login-btn" onclick="doLogin()" data-i18n="login.btn">Войти</button>
+      </div>
+
+      <div class="form-section" id="tab-register">
+        <div id="reg-form">
+          <div class="err-msg" id="reg-err"></div>
+          <div class="info-box" style="margin-bottom:14px;font-size:12px" data-i18n="login.reg_info">Будет создан кошелёк с мнемоником из 12 слов и ECDSA ключами.</div>
+          <div class="field"><label class="label" data-i18n="login.label_name">Название</label><input class="input" id="reg-label" data-i18n-placeholder="login.label_ph" placeholder="Основной кошелёк..."></div>
+          <div class="field"><label class="label" data-i18n="login.label_pass">Пароль (мин. 6 символов)</label><input class="input" type="password" id="reg-pass" data-i18n-placeholder="login.reg_pass_ph" placeholder="Придумайте пароль"></div>
+          <div class="field"><label class="label" data-i18n="login.label_pass2">Повтор пароля</label><input class="input" type="password" id="reg-pass2" data-i18n-placeholder="login.reg_pass2_ph" placeholder="Повторите" onkeydown="if(event.key==='Enter')doRegister()"></div>
+          <button class="btn btn-primary btn-full" id="reg-btn" onclick="doRegister()" data-i18n="login.create_btn">Создать кошелёк</button>
+        </div>
+        <div class="success-box" id="reg-success">
+          <div style="color:var(--green);font-weight:700;font-size:16px;margin-bottom:12px" data-i18n="login.created">✓ Кошелёк создан!</div>
+          <div class="warn-box" style="margin-bottom:14px;font-size:12px" data-i18n="login.save_warn">⚠️ Сохрани мнемоник — единственный способ восстановить кошелёк!</div>
+          <div class="label" data-i18n="login.addr_label">Адрес</div>
+          <div class="key-box" id="reg-addr-box" style="margin-bottom:10px">—<button class="copy-btn" onclick="copyEl('reg-addr-box')" data-i18n="common.copy">Копировать</button></div>
+          <div class="label" data-i18n="login.mnem_label">Мнемоник (12 слов)</div>
+          <div class="mnemonic-grid" id="reg-mnemonic"></div>
+          <div class="label" style="margin-top:10px" data-i18n="login.privkey_label">Приватный ключ</div>
+          <div class="key-box" id="reg-key-box" style="color:var(--accent2);margin-bottom:14px">—<button class="copy-btn" onclick="copyEl('reg-key-box')" data-i18n="common.copy">Копировать</button></div>
+          <button class="btn btn-primary btn-full" onclick="goToApp()" data-i18n="login.open_wallet">Открыть кошелёк →</button>
+        </div>
+      </div>
+
+      <div class="form-section" id="tab-import">
+        <div class="err-msg" id="imp-err"></div>
+        <div class="field"><label class="label" data-i18n="login.privkey_label2">Приватный ключ (64 hex)</label><input class="input" id="imp-key" data-i18n-placeholder="login.privkey_ph" placeholder="a3f4..."></div>
+        <div class="field"><label class="label" data-i18n="login.new_pass">Новый пароль</label><input class="input" type="password" id="imp-pass" data-i18n-placeholder="login.set_pass_ph" placeholder="Установите пароль"></div>
+        <div class="field"><label class="label" data-i18n="login.label_name">Название</label><input class="input" id="imp-label" data-i18n-placeholder="login.imp_label_ph" placeholder="Мой кошелёк..."></div>
+        <button class="btn btn-primary btn-full" id="imp-btn" onclick="doImport()" data-i18n="login.import_btn">Импортировать</button>
+      </div>
+
+      <div class="form-section" id="tab-mnemonic">
+        <div class="err-msg" id="mn-err"></div>
+        <div class="info-box" style="margin-bottom:14px;font-size:12px" data-i18n="login.mn_info">Восстановление по 12 словам BIP-39. Введи слова через пробел.</div>
+        <div class="field"><label class="label" data-i18n="login.mn_words">12 слов мнемоника</label><textarea class="input" id="mn-words" rows="3" placeholder="word1 word2 word3 ..."></textarea></div>
+        <div class="field"><label class="label" data-i18n="login.new_pass">Новый пароль</label><input class="input" type="password" id="mn-pass" data-i18n-placeholder="login.set_pass_ph" placeholder="Установите пароль"></div>
+        <div class="field"><label class="label" data-i18n="login.label_name">Название</label><input class="input" id="mn-label" data-i18n-placeholder="login.mn_label_ph" placeholder="Восстановленный..."></div>
+        <button class="btn btn-primary btn-full" id="mn-btn" onclick="doImportMnemonic()" data-i18n="login.restore_btn">Восстановить</button>
+      </div>
+    </div>
+    <div class="node-info"><span class="dot-sm" id="nodeDot" style="background:var(--muted)"></span><span id="nodeText" data-i18n="login.checking_node">проверка ноды...</span></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="login.js"></script>
+<script src="/i18n.js"></script>
+</body>
+</html>

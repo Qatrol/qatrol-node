@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Rich List — Qatrol Coin</title>
+<style>
+:root{--bg:#080808;--bg2:#0f0f0f;--bg3:#161616;--border:rgba(212,175,55,.12);--border2:rgba(212,175,55,.28);--gold:#d4af37;--gold2:#f5e27a;--green:#3ddc84;--red:#ff5555;--text:#e8e0d0;--muted:#5a5040;--mono:'Space Mono',monospace;--sans:'Space Grotesk',sans-serif}
+*{margin:0;padding:0;box-sizing:border-box}
+html{font-size:15px;scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;min-height:100vh}
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;background-image:linear-gradient(rgba(212,175,55,.02) 1px,transparent 1px),linear-gradient(90deg,rgba(212,175,55,.02) 1px,transparent 1px);background-size:50px 50px}
+a{color:inherit;text-decoration:none}
+
+.nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:0 32px;height:60px;background:rgba(8,8,8,.9);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
+.nav-logo{display:flex;align-items:center;gap:8px;font-size:18px;font-weight:800;letter-spacing:-1px}
+.nav-logo span{color:var(--gold)}
+.nav-links{display:flex;gap:20px}
+.nav-link{font-size:13px;color:var(--muted);transition:color .2s}
+.nav-link:hover,.nav-link.active{color:var(--text)}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-family:var(--sans);font-size:13px;font-weight:700;transition:all .2s;text-decoration:none}
+.btn-outline{background:transparent;border:1px solid var(--border2);color:var(--gold)}
+.btn-outline:hover{background:rgba(212,175,55,.08)}
+
+.wrap{max-width:960px;margin:0 auto;padding:80px 24px 60px;position:relative;z-index:1}
+
+.page-header{margin-bottom:40px}
+.page-label{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:3px;color:var(--gold);margin-bottom:10px}
+.page-title{font-size:clamp(28px,5vw,44px);font-weight:800;letter-spacing:-2px;margin-bottom:8px}
+.page-sub{font-size:14px;color:rgba(232,224,208,.5);line-height:1.6}
+
+.summary-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:32px}
+.summary-row2{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:32px}
+.summary-card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:20px;transition:border-color .2s}
+.summary-card:hover{border-color:var(--border2)}
+.summary-val{font-family:var(--mono);font-size:22px;font-weight:700;color:var(--gold);margin-bottom:4px}
+.summary-lbl{font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px}
+.summary-hint{font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:4px;line-height:1.4}
+.copy-btn{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:9px;color:var(--muted);background:rgba(212,175,55,.06);border:1px solid var(--border);border-radius:4px;padding:1px 6px;cursor:pointer;transition:all .15s;margin-left:4px;vertical-align:middle}
+.copy-btn:hover{color:var(--gold);border-color:var(--border2)}
+.copy-btn.copied{color:var(--green);border-color:rgba(61,220,132,.3)}
+
+.table-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.table-header{display:grid;grid-template-columns:48px 1fr 160px 120px 180px;padding:14px 20px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px}
+.table-row{display:grid;grid-template-columns:48px 1fr 160px 120px 180px;padding:14px 20px;border-bottom:1px solid rgba(212,175,55,.05);transition:background .15s;align-items:center}
+.table-row:last-child{border-bottom:none}
+.table-row:hover{background:var(--bg3)}
+.rank{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--muted)}
+.rank.top1{color:#ffd700;font-size:18px}
+.rank.top2{color:#c0c0c0;font-size:16px}
+.rank.top3{color:#cd7f32;font-size:16px}
+.addr{font-family:var(--mono);font-size:12px;color:var(--text)}
+.addr-full{display:none}
+.addr-short{display:block}
+.balance-val{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--gold);text-align:right}
+.pct-val{font-family:var(--mono);font-size:12px;color:var(--muted);text-align:right}
+.bar-cell{padding-right:8px}
+.bar-track{height:6px;background:var(--bg3);border-radius:3px;overflow:hidden}
+.bar-fill{height:100%;background:linear-gradient(90deg,#8b6914,var(--gold));border-radius:3px;transition:width .8s ease}
+.genesis-badge{display:inline-block;font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:4px;background:rgba(212,175,55,.1);border:1px solid var(--border2);color:var(--gold);margin-left:8px;vertical-align:middle}
+.loading{text-align:center;padding:60px;font-family:var(--mono);color:var(--muted);font-size:13px}
+.updated{font-family:var(--mono);font-size:10px;color:var(--muted);text-align:right;margin-top:12px}
+
+@media(max-width:720px){
+  .nav{padding:0 16px}
+  .nav-links{display:none}
+  .summary-row{grid-template-columns:1fr 1fr}
+  .table-header{grid-template-columns:36px 1fr 100px 80px;gap:0}
+  .table-header > *:last-child{display:none}
+  .table-row{grid-template-columns:36px 1fr 100px 80px}
+  .table-row > .bar-cell{display:none}
+  .balance-val{font-size:11px}
+}
+@media(max-width:480px){
+  .summary-row{grid-template-columns:1fr}
+  .wrap{padding:74px 12px 40px}
+}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <a href="/" class="nav-logo"><span>◆</span> QATROL COIN</a>
+  <div class="nav-links">
+    <a href="/" class="nav-link" data-i18n="nav.home">Главная</a>
+    <a href="/app" class="nav-link" data-i18n="nav.wallet">Кошелёк</a>
+    <a href="/network" class="nav-link" data-i18n="nav.stats">Статистика</a>
+    <a href="/richlist" class="nav-link active" data-i18n="nav.richlist">Rich List</a>
+    <a href="/status" class="nav-link" data-i18n="nav.status">Статус</a>
+    <a href="https://t.me/QatrolCoin" target="_blank" class="nav-link" style="color:#229ed9">Telegram</a>
+  </div>
+  <a href="/login" class="btn btn-outline" data-i18n="nav.login">Войти</a>
+</nav>
+
+<div class="wrap">
+  <div class="page-header">
+    <div class="page-label" data-i18n="rl.label">◆ Держатели</div>
+    <h1 class="page-title">Rich List <span style="color:var(--gold)">QTR</span></h1>
+    <p class="page-sub" data-i18n="rl.sub">Топ-50 адресов по балансу. Обновляется в реальном времени.</p>
+  </div>
+
+  <div class="summary-row" id="summaryRow">
+    <div class="summary-card"><div class="summary-val" id="s-total">—</div><div class="summary-lbl" data-i18n="rl.total">Всего в обращении</div></div>
+    <div class="summary-card"><div class="summary-val" id="s-wallets">—</div><div class="summary-lbl" data-i18n="rl.wallets">Всего адресов</div></div>
+    <div class="summary-card"><div class="summary-val" id="s-top1pct">—</div><div class="summary-lbl" data-i18n="rl.top1">Доля топ-1</div></div>
+    <div class="summary-card"><div class="summary-val" id="s-top10pct">—</div><div class="summary-lbl" data-i18n="rl.top10">Доля топ-10</div></div>
+  </div>
+  <div class="summary-row2">
+    <div class="summary-card">
+      <div class="summary-val" id="s-gini" style="color:var(--green)">—</div>
+      <div class="summary-lbl" data-i18n="rl.gini">Коэффициент Джини</div>
+      <div class="summary-hint" data-i18n="rl.gini_hint">0 = полное равенство · 1 = монополия</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-val" id="s-nakamoto" style="color:#7b6fff">—</div>
+      <div class="summary-lbl" data-i18n="rl.nakamoto">Коэффициент Накамото</div>
+      <div class="summary-hint" data-i18n="rl.nakamoto_hint">мин. кол-во держателей для 51% монет</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-val" id="s-top50pct">—</div>
+      <div class="summary-lbl" data-i18n="rl.top50">Доля топ-50</div>
+      <div class="summary-hint" data-i18n="rl.top50_hint">процент монет у топ-50 адресов</div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <div class="table-header">
+      <div data-i18n="rl.col.rank">#</div>
+      <div data-i18n="rl.col.address">Адрес</div>
+      <div style="text-align:right" data-i18n="rl.col.balance">Баланс QTR</div>
+      <div style="text-align:right" data-i18n="rl.col.share">Доля</div>
+      <div data-i18n="rl.col.bar">Распределение</div>
+    </div>
+    <div id="tableBody"><div class="loading">⏳ Загрузка...</div></div>
+  </div>
+  <div class="updated" id="updated"></div>
+</div>
+
+<script>
+let genesisAddr = null;
+
+function short(addr) {
+  if (!addr) return '—';
+  return addr.slice(0,10)+'…'+addr.slice(-6);
+}
+
+function fmtNum(n) {
+  if (n >= 1e6) return (n/1e6).toFixed(2)+'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1)+'k';
+  return n.toLocaleString('ru');
+}
+
+function rankIcon(r) {
+  if (r === 1) return { cls:'top1', icon:'🥇' };
+  if (r === 2) return { cls:'top2', icon:'🥈' };
+  if (r === 3) return { cls:'top3', icon:'🥉' };
+  return { cls:'', icon:r };
+}
+
+function calcGini(balances) {
+  if (!balances.length) return 0;
+  const sorted = [...balances].sort((a,b)=>a-b);
+  const n = sorted.length;
+  const total = sorted.reduce((s,v)=>s+v,0);
+  if (!total) return 0;
+  let sumDiff = 0;
+  for (let i = 0; i < n; i++)
+    for (let j = 0; j < n; j++)
+      sumDiff += Math.abs(sorted[i] - sorted[j]);
+  return sumDiff / (2 * n * total);
+}
+
+function calcNakamoto(list) {
+  const total = list.reduce((s,w)=>s+w.balance,0);
+  let acc = 0, count = 0;
+  for (const w of list) {
+    acc += w.balance; count++;
+    if (acc / total > 0.51) return count;
+  }
+  return count;
+}
+
+function copyAddr(addr, btn) {
+  navigator.clipboard.writeText(addr).then(() => {
+    btn.textContent = '✓ ' + ((typeof T==='function'&&T('rl.copied'))||'скопировано');
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = '⎘ ' + ((typeof T==='function'&&T('rl.copy'))||'копировать'); btn.classList.remove('copied'); }, 1500);
+  });
+}
+
+async function load() {
+  try {
+    const [rlRes, stRes] = await Promise.all([
+      fetch('/api/richlist?limit=50'),
+      fetch('/api/stats')
+    ]);
+    const rl = await rlRes.json();
+    const st = await stRes.json();
+    genesisAddr = st.genesisAddress;
+
+    // Summary row 1
+    document.getElementById('s-total').textContent = fmtNum(rl.total) + ' QTR';
+    document.getElementById('s-wallets').textContent = rl.count;
+
+    const top1pct = rl.list[0]?.percent || 0;
+    const top10pct = rl.list.slice(0,10).reduce((s,w) => s + w.percent, 0);
+    document.getElementById('s-top1pct').textContent = top1pct.toFixed(1) + '%';
+    document.getElementById('s-top10pct').textContent = top10pct.toFixed(1) + '%';
+
+    // Summary row 2 — distribution metrics
+    const balances = rl.list.map(w => w.balance);
+    const gini = calcGini(balances);
+    const nakamoto = calcNakamoto(rl.list);
+    const top50pct = rl.list.reduce((s,w)=>s+w.percent,0);
+    document.getElementById('s-gini').textContent = gini.toFixed(3);
+    document.getElementById('s-gini').style.color = gini > 0.7 ? 'var(--red)' : gini > 0.5 ? 'var(--yellow)' : 'var(--green)';
+    document.getElementById('s-nakamoto').textContent = nakamoto;
+    document.getElementById('s-top50pct').textContent = top50pct.toFixed(1) + '%';
+
+    const maxBal = rl.list[0]?.balance || 1;
+
+    let rows = '';
+    for (const w of rl.list) {
+      try {
+        const { cls, icon } = rankIcon(w.rank);
+        const isGenesis = w.address === genesisAddr;
+        const balNum = parseFloat(w.balance) || 0;
+        const pctNum = parseFloat(w.percent) || 0;
+        const barW = maxBal > 0 ? Math.max(1, (balNum / maxBal * 100)).toFixed(1) : '1';
+        const copyLabel = (typeof T === 'function' && T('rl.copy')) || 'копировать';
+        rows += `<div class="table-row">
+          <div class="rank ${cls}">${icon}</div>
+          <div class="addr">
+            <span class="addr-short">
+              ${short(w.address)}${isGenesis ? '<span class="genesis-badge">genesis</span>' : ''}
+              <button class="copy-btn" onclick="copyAddr('${w.address}',this)">⎘ ${copyLabel}</button>
+            </span>
+            <span class="addr-full" title="${w.address}">
+              ${w.address}${isGenesis ? '<span class="genesis-badge">genesis</span>' : ''}
+              <button class="copy-btn" onclick="copyAddr('${w.address}',this)">⎘ ${copyLabel}</button>
+            </span>
+          </div>
+          <div class="balance-val">${balNum.toLocaleString('ru', {maximumFractionDigits:4})}</div>
+          <div class="pct-val">${pctNum.toFixed(2)}%</div>
+          <div class="bar-cell"><div class="bar-track"><div class="bar-fill" style="width:${barW}%"></div></div></div>
+        </div>`;
+      } catch(rowErr) {
+        console.error('Row render error for rank', w.rank, rowErr);
+      }
+    }
+
+    document.getElementById('tableBody').innerHTML = rows || '<div class="loading">' + ((typeof T === 'function' && T('rl.no_data')) || 'Нет данных') + '</div>';
+    const locale = (typeof T==='function'&&T('time.locale'))||'ru';
+    document.getElementById('updated').textContent = ((typeof T==='function'&&T('common.updated'))||'Обновлено') + ': ' + new Date().toLocaleTimeString(locale);
+  } catch(e) {
+    document.getElementById('tableBody').innerHTML = '<div class="loading">❌ ' + ((typeof T==='function'&&T('rl.node_unavail'))||'Нода недоступна') + '</div>';
+  }
+}
+
+setInterval(load, 30_000);
+document.addEventListener('langchange', load);
+</script>
+<script src="/i18n.js"></script>
+<script>setTimeout(load, 0);</script>
+</body>
+</html>
