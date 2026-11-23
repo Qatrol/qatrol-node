@@ -150,6 +150,3 @@ docs/ARCHITECTURE.md   как всё устроено
 test-api.js            тесты API
 ```
 
-## Лицензия
-
-MIT. Подробности в [LICENSE](LICENSE).
