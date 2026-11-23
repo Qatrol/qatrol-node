@@ -3,6 +3,26 @@
 
 const http   = require('http');
 const crypto = require('crypto');
+const fs     = require('fs');
+const path   = require('path');
+
+// Загрузка .env — иначе пул не видит QTR_POOL_ADDRESS/QTR_POOL_PRIVATE_KEY
+// при запуске через `node pool/server.js` (раньше .env читал только miner.js).
+(function loadEnv() {
+  const p = path.join(__dirname, '..', '.env');
+  if (!fs.existsSync(p)) return;
+  for (let line of fs.readFileSync(p, 'utf8').split('\n')) {
+    line = line.replace(/\r$/, '').trim();
+    if (!line || line.startsWith('#')) continue;
+    const eq = line.indexOf('=');
+    if (eq < 1) continue;
+    const key = line.slice(0, eq).trim();
+    let val = line.slice(eq + 1).trim();
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) val = val.slice(1, -1);
+    if (key) process.env[key] = val;
+  }
+})();
+
 const bc     = require('../blockchain');
 const ecdsa  = require('../crypto/ecdsa');
 
@@ -13,6 +33,8 @@ const POOL_API_KEY = process.env.QTR_POOL_API_KEY || '';
 const POOL_PRIVATE_KEY = process.env.QTR_POOL_PRIVATE_KEY || '';
 const POOL_FEE     = 0.02; // 2% пулу
 const SHARE_DIFF   = 3;    // сложность шары (легче основной)
+const MAX_WORKERS  = 1000; // потолок, чтобы /pool/job не раздувал память
+const BIND_HOST    = process.env.QTR_BIND || '127.0.0.1';
 
 // Подключённые воркеры: id -> { address, shares, lastSeen, socket? }
 const workers     = new Map();
@@ -64,6 +86,19 @@ setInterval(() => {
 }, 60_000);
 
 // ─── Запрос к основной ноде ───────────────────────────────────────────────────
+let nodeDown = false;
+let _nodeDownLoggedAt = 0;
+function markNode(down, reason) {
+  if (down !== nodeDown) {
+    nodeDown = down;
+    if (down) { _nodeDownLoggedAt = Date.now(); console.log(`⚠️  Нода недоступна: ${reason || 'нет ответа'}`); }
+    else console.log('✅ Нода снова на связи');
+  } else if (down && Date.now() - _nodeDownLoggedAt > 60_000) {
+    _nodeDownLoggedAt = Date.now();
+    console.log(`⚠️  Нода всё ещё недоступна: ${reason || 'нет ответа'}`);
+  }
+}
+
 function nodeRequest(path, method = 'GET', body = null) {
   return new Promise(resolve => {
     const opts = {
@@ -73,19 +108,58 @@ function nodeRequest(path, method = 'GET', body = null) {
     const req = http.request(opts, res => {
       let data = '';
       res.on('data', c => data += c);
-      res.on('end', () => { try { resolve(JSON.parse(data)); } catch { resolve(null); } });
+      res.on('end', () => {
+        markNode(false);
+        try { resolve(JSON.parse(data)); } catch { resolve(null); }
+      });
     });
-    req.on('error', () => resolve(null));
-    req.on('timeout', () => { req.destroy(); resolve(null); });
+    req.on('error', e => { markNode(true, e.message); resolve(null); });
+    req.on('timeout', () => { markNode(true, 'таймаут'); req.destroy(); resolve(null); });
     if (body) req.write(JSON.stringify(body));
     req.end();
   });
 }
 
-// ─── Мьютексы ────────────────────────────────────────────────────────────────
-let _jobLock   = false; // не допускаем параллельного создания заданий
-let _blockLock = false; // не допускаем параллельного сабмита блока
-let _payoutLock = false; // не допускаем параллельных выплат
+// ─── Очереди вместо «занято → выбросить» ──────────────────────────────────────
+// Раньше найденный блок, попавший в момент отправки другого блока, терялся,
+// а воркеру всё равно отвечали «блок найден». Теперь сабмиты идут по очереди.
+let _jobLock = false;
+let _blockChain = Promise.resolve();
+let _payoutChain = Promise.resolve();
+
+function withBlockLock(fn) {
+  const run = _blockChain.then(fn, fn);
+  _blockChain = run.then(() => {}, () => {});
+  return run;
+}
+function runPayouts(payouts, blockIndex) {
+  const run = _payoutChain.then(() => doPayouts(payouts, blockIndex));
+  _payoutChain = run.then(() => {}, () => {});
+  return run;
+}
+
+async function doPayouts(payouts, blockIndex) {
+  if (!payouts.length) return;
+  if (!POOL_ADDRESS || !POOL_PRIVATE_KEY) {
+    console.log(`⚠️  Блок #${blockIndex}: выплаты отключены — не заданы QTR_POOL_ADDRESS/QTR_POOL_PRIVATE_KEY`);
+    return;
+  }
+  let paid = 0, failed = 0;
+  const paidAddrs = [];
+  for (const p of payouts) {
+    const sent = await submitPayoutTx(p.address, p.payout);
+    if (sent.success) { paid++; paidAddrs.push(p.address); }
+    else if (sent.skipped) console.log(`⚠️  ${p.address.slice(0,16)}… выплата пропущена: ${sent.reason}`);
+    else { failed++; console.log(`❌ ${p.address.slice(0,16)}… выплата не прошла: ${sent.reason}`); }
+  }
+  // Обнуляем шары только у тех, кому реально заплатили: иначе офлайн-воркер
+  // теряет заработанное, как только у него на минуту пропал интернет.
+  for (const addr of paidAddrs) {
+    const w = workers.get(addr);
+    if (w) w.shares = 0;
+  }
+  console.log(`💸 Блок #${blockIndex}: выплачено ${paid}, ошибок ${failed}`);
+}
 
 // ─── Очистка старых воркеров (раз в 10 минут) ──────────────────────────────
 setInterval(() => {
@@ -95,12 +169,21 @@ setInterval(() => {
   }
 }, 10 * 60_000);
 
+function txSignature(txs) {
+  return (txs || []).map(t => `${t.from}>${t.to}:${t.amount}:${t.fee}`).sort().join('|');
+}
+
 // ─── Генерация задания для воркеров ─────────────────────────────────────────
 async function generateJob(force = false) {
   if (_jobLock) return currentJob; // уже генерируем — вернём текущее
   _jobLock = true;
   try {
-    const tpl = await nodeRequest(`/pool/template?miner=${encodeURIComponent(POOL_ADDRESS || 'POOL')}`);
+    // Без адреса пула шаблон собирается на адрес ноды: награда не сгорает
+    // в кошельке с ключом 'POOL', который никто не может подписать.
+    const tplPath = POOL_ADDRESS
+      ? `/pool/template?miner=${encodeURIComponent(POOL_ADDRESS)}`
+      : '/pool/template';
+    const tpl = await nodeRequest(tplPath);
     if (!tpl?.template) return currentJob;
 
     const t = tpl.template;
@@ -108,8 +191,10 @@ async function generateJob(force = false) {
       || !currentJob
       || t.index      !== currentJob.template.index
       || t.prevHash   !== currentJob.template.prevHash
-      || t.difficulty !== currentJob.template.difficulty   // <-- ключевой fix
-      || t.transactions.length !== currentJob.template.transactions.length;
+      || t.difficulty !== currentJob.template.difficulty
+      // Сравниваем состав транзакций без id и timestamp: id у reward-транзакции
+      // случайный в каждом шаблоне, иначе задание менялось на каждом запросе.
+      || txSignature(t.transactions) !== txSignature(currentJob.template.transactions);
 
     if (!changed) return currentJob;
 
@@ -140,6 +225,9 @@ function checkShare(share) {
             : (share.jobId === previousJob?.jobId) ? previousJob
             : null;
   if (!job) return { valid: false, reason: 'stale job' };
+  if (!Number.isInteger(job.template?.difficulty) || job.template.difficulty < 1) {
+    return { valid: false, reason: 'bad job difficulty' };
+  }
 
   const hashData = {
     index: job.template.index,
@@ -216,19 +304,39 @@ async function submitPayoutTx(to, amount) {
 // ─── HTTP сервер пула ─────────────────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
   const CORS = {
-    'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Content-Type': 'application/json'
   };
+  if (process.env.QTR_CORS_ORIGIN) CORS['Access-Control-Allow-Origin'] = process.env.QTR_CORS_ORIGIN;
   if (req.method === 'OPTIONS') { res.writeHead(200, CORS); res.end(); return; }
 
   function ok(obj)         { res.writeHead(200, CORS); res.end(JSON.stringify(obj)); }
   function fail(code, msg) { res.writeHead(code, CORS); res.end(JSON.stringify({ error: msg })); }
   function body(cb) {
+    const MAX_BODY = 256 * 1024; // задания и шары маленькие, больше не нужно
     let b = '';
-    req.on('data', d => b += d);
-    req.on('end', () => { try { cb(JSON.parse(b || '{}')); } catch { fail(400, 'Invalid JSON'); } });
+    let tooBig = false;
+    req.on('data', d => {
+      if (tooBig) return;
+      b += d;
+      if (b.length > MAX_BODY) { tooBig = true; b = ''; fail(413, 'Тело запроса слишком большое'); }
+    });
+    req.on('end', () => {
+      if (tooBig) return;
+      let parsed;
+      try { parsed = JSON.parse(b || '{}'); }
+      catch { return fail(400, 'Invalid JSON'); }
+      try {
+        const r = cb(parsed);
+        if (r && typeof r.catch === 'function') {
+          r.catch(e => { console.error('pool handler failed:', e.message); try { fail(500, 'internal error'); } catch {} });
+        }
+      } catch (e) {
+        console.error('pool handler failed:', e.message);
+        fail(500, 'internal error');
+      }
+    });
   }
 
   const url = req.url.split('?')[0];
@@ -302,10 +410,12 @@ const server = http.createServer(async (req, res) => {
 
   // POST /pool/job — воркер запрашивает задание
   if (req.method === 'POST' && url === '/pool/job') {
+    if (nodeDown) return fail(503, 'Нода недоступна');
     return body(async ({ address }) => {
-      if (!address) return fail(400, 'Нужен address');
+      if (typeof address !== 'string' || !/^K[0-9A-F]{39,40}$/.test(address)) return fail(400, 'Некорректный адрес');
       if (!workers.has(address)) {
-        workers.set(address, { address, shares: 0, lastSeen: Date.now(), hashrate: 0 });
+        if (workers.size >= MAX_WORKERS) return fail(429, 'Пул переполнен');
+        workers.set(address, { address, shares: 0, lastSeen: Date.now(), hashrate: 0, seen: new Set() });
         console.log(`⛏  Новый воркер: ${address.slice(0, 16)}...`);
       }
       const w = workers.get(address);
@@ -319,8 +429,10 @@ const server = http.createServer(async (req, res) => {
 
   // POST /pool/submit — воркер отправляет шару
   if (req.method === 'POST' && url === '/pool/submit') {
+    if (nodeDown) return fail(503, 'Нода недоступна');
     return body(async ({ address, nonce, jobId: jId, hashrate }) => {
-      if (!address || nonce === undefined) return fail(400, 'Нужны: address, nonce');
+      if (typeof address !== 'string' || !address || nonce === undefined) return fail(400, 'Нужны: address, nonce');
+      if (!Number.isInteger(nonce) || nonce < 0) return fail(400, 'nonce должен быть целым числом');
 
       if (!workers.has(address)) return fail(400, 'Сначала запроси задание /pool/job');
       const w = workers.get(address);
@@ -335,6 +447,17 @@ const server = http.createServer(async (req, res) => {
         return ok({ accepted: false, reason: shareResult.reason });
       }
 
+      // Одна и та же шара (job+nonce) второй раз не считается: иначе один
+      // найденный nonce можно переотправлять бесконечно и выкачать пул.
+      const shareKey = `${jId}:${nonce}`;
+      if (!w.seen) w.seen = new Set();
+      if (w.seen.has(shareKey)) {
+        poolStats.sharesBad++;
+        return ok({ accepted: false, reason: 'duplicate share' });
+      }
+      w.seen.add(shareKey);
+      if (w.seen.size > 10_000) w.seen.clear();
+
       // Принимаем шару
       w.shares++;
       poolStats.sharesAccepted++;
@@ -348,46 +471,34 @@ const server = http.createServer(async (req, res) => {
       console.log(`✅ Шара #${w.shares} от ${address.slice(0, 12)}... hash=${shareResult.hash.slice(0,14)}... | ${shareResult.isBlock ? '🎯 БЛОК!' : 'share'}`);
 
       // Если нашли реальный блок — отправляем на ноду (с блокировкой)
-      if (shareResult.isBlock && !_blockLock) {
-        _blockLock = true;
-        try {
-          const blk = shareResult.block;
+      if (shareResult.isBlock) {
+        const blk = shareResult.block;
+        const result = await withBlockLock(async () => {
           console.log(`\n🎯 БЛОК НАЙДЕН! index=${blk.index} diff=${blk.difficulty} nonce=${blk.nonce}`);
           console.log(`   hash=${blk.hash}`);
           console.log(`   prevHash=${blk.prevHash}`);
-          console.log(`   Отправляем на ноду...`);
 
           const submit = await nodeRequest('/pool/submit-block', 'POST', { block: blk, apiKey: POOL_API_KEY });
-          console.log(`   Ответ ноды: ${JSON.stringify(submit)}`);
-
           if (!submit?.success) {
             poolStats.blocksRejected++;
             poolStats.lastRejectReason = submit?.error || 'unknown';
             console.log(`❌ Нода отклонила блок: ${submit?.error || 'unknown error'}`);
-            return ok({ accepted: false, reason: 'block rejected by node' });
+            return { ok: false, error: submit?.error || 'block rejected by node' };
           }
 
           poolStats.blocksFound++;
           poolStats.lastBlockTime  = Date.now();
           poolStats.lastBlockIndex = blk.index;
           poolStats.lastBlockHash  = blk.hash;
+          console.log(`🎉 БЛОК #${blk.index} ПРИНЯТ`);
 
-          if (!_payoutLock) {
-            _payoutLock = true;
-            try {
-              const payouts = calcPayouts(bc.BLOCK_REWARD);
-              console.log(`\n🎉 БЛОК #${blk.index} ПРИНЯТ! Выплаты (${payouts.length} воркеров):`);
-              payouts.forEach(p => console.log(`   ${p.address.slice(0, 16)}... : ${p.payout} QTR (${p.percent}%)`));
-              for (const p of payouts) {
-                const sent = await submitPayoutTx(p.address, p.payout);
-                if (!sent.success && !sent.skipped) console.log(`❌ payout failed ${p.address.slice(0, 16)}...: ${sent.reason}`);
-              }
-              // Сбрасываем шары после блока
-              workers.forEach(worker => { worker.shares = 0; });
-              console.log(`\n`);
-            } finally { _payoutLock = false; }
-          }
-        } finally { _blockLock = false; }
+          const payouts = calcPayouts(bc.BLOCK_REWARD);
+          console.log(`   Выплаты (${payouts.length} воркеров): ` + payouts.map(p => `${p.address.slice(0,12)}… ${p.payout} QTR`).join(', '));
+          runPayouts(payouts, blk.index); // очередь выплат, ответ воркеру не ждём
+          return { ok: true };
+        });
+
+        if (!result.ok) return ok({ accepted: false, reason: result.error });
       }
 
       // Новое задание (один вызов)
@@ -457,26 +568,24 @@ async function runAutoPayout() {
       const res = await submitPayoutTx(p.address, p.payout);
       if (res.success) {
         console.log(`   ✅ ${p.address.slice(0,16)}... : ${p.payout} QTR (${p.percent}%)`);
+        const w = workers.get(p.address);
+        if (w) w.shares = 0; // сбрасываем только оплаченным
         sent++;
-      } else if (!res.skipped) {
-        console.log(`   ❌ ${p.address.slice(0,16)}...: ${res.reason}`);
+      } else {
+        console.log(`   ${res.skipped ? '⚠️ ' : '❌'} ${p.address.slice(0,16)}...: ${res.reason}`);
       }
     }
-    if (sent > 0) {
-      // Сбрасываем шары после выплаты
-      workers.forEach(w => { w.shares = 0; });
-      console.log(`   Выплачено ${sent} воркер(ам). Счётчик шар сброшен.\n`);
-    }
+    if (sent > 0) console.log(`   Выплачено ${sent} воркер(ам).\n`);
   } catch (e) {
     console.error('Авто-выплата ошибка:', e.message);
   }
 }
 
-server.listen(POOL_PORT, async () => {
+server.listen(POOL_PORT, BIND_HOST, async () => {
   console.log('\n\x1b[33m╔══════════════════════════════════════════════════╗\x1b[0m');
   console.log('\x1b[33m║      ◆  QATROL COIN MINING POOL  ◆               ║\x1b[0m');
   console.log('\x1b[33m╚══════════════════════════════════════════════════╝\x1b[0m');
-  console.log(`\n  Пул:   http://localhost:${POOL_PORT}`);
+  console.log(`\n  Пул:   http://${BIND_HOST}:${POOL_PORT}`);
   console.log(`  Нода:  http://localhost:${API_PORT}`);
   console.log(`  Комиссия пула: ${POOL_FEE * 100}%`);
   console.log(`  Сложность шары: ${SHARE_DIFF} (реальная: устанавливается нодой)\n`);
@@ -487,8 +596,9 @@ server.listen(POOL_PORT, async () => {
 // Проверяем изменения каждые 5 сек, задание меняем только при реальных изменениях
 setInterval(() => generateJob(false), 5_000);
 
-// Принудительно обновляем задание каждые 30 сек — чтобы timestamp и difficulty всегда актуальны
-setInterval(() => generateJob(true), 30_000);
+// Принудительного обновления каждые 30 секунд больше нет: на сложности 6+
+// блок ищется минутами, а смена задания каждые полминуты сбрасывала nonce
+// у воркеров, и блок не находился никогда.
 
 // Авто-выплата каждые 5 минут
 setInterval(runAutoPayout, 5 * 60 * 1000);

@@ -293,9 +293,11 @@ function updateKPI(stats, chartData, pool) {
   document.getElementById('k-tx').textContent = txTotal.toLocaleString('ru');
 
   const circ = parseFloat(stats.circulatingSupply||0);
-  document.getElementById('k-circ').textContent = circ >= 1e6
-    ? (circ/1e6).toFixed(2)+'M QTR'
-    : circ.toLocaleString('ru') + ' QTR';
+  document.getElementById('k-circ').textContent = circ >= 1e9
+    ? (circ/1e9).toFixed(2)+'B QTR'
+    : circ >= 1e6
+      ? (circ/1e6).toFixed(2)+'M QTR'
+      : circ.toLocaleString('ru') + ' QTR';
 
   document.getElementById('k-pending').textContent = stats.pendingTx || 0;
 

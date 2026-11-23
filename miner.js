@@ -41,6 +41,14 @@ const MINE_CHUNK   = 3_000;
 const POOL_API_KEY = process.env.QTR_POOL_API_KEY || '';
 const NO_MINE      = process.env.QTR_NO_MINE === 'true'; // чистая нода без майнинга
 
+// Пул-эндпоинты: с ключом — только с ключом. Без ключа пускаем лишь localhost,
+// иначе при пустом QTR_POOL_API_KEY любой в сети мог прислать свой блок.
+function poolAuthorized(req, apiKey) {
+  if (POOL_API_KEY) return apiKey === POOL_API_KEY;
+  const ip = req.socket.remoteAddress || '';
+  return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+}
+
 // Rate limiting: IP → { count, resetAt }
 const _rateLimits = new Map();
 function rateLimit(ip, max = 10, windowMs = 60_000) {
@@ -130,7 +138,11 @@ async function setup() {
     minerPrivKey = kp.privateKey;
     return;
   }
-  const firstRun = !fs.existsSync('blockchain.json');
+  // Режим «чистая нода» без ключа: спрашивать нечего, майнинга не будет.
+  // Раньше QTR_NO_MINE=true всё равно вешал процесс на приглашении выбора,
+  // хотя README обещает старт без интерактива.
+  if (NO_MINE) return;
+  const firstRun = !fs.existsSync(bc.DB_FILE);
 
   console.log('\n\x1b[33m╔══════════════════════════════════════════════════╗\x1b[0m');
   console.log('\x1b[33m║                                                  ║\x1b[0m');
@@ -177,7 +189,7 @@ async function setup() {
     console.log('\x1b[91m  ║  ⚠  СОХРАНИ — БЕЗ КЛЮЧА ДОСТУП ПОТЕРЯН НАВСЕГДА ║\x1b[0m');
     console.log('\x1b[91m  ╚══════════════════════════════════════════════════╝\x1b[0m\n');
 
-    const fname = `qatrol_wallet_${Date.now()}.txt`;
+    const fname = path.join(__dirname, `qatrol_wallet_${Date.now()}.txt`);
     fs.writeFileSync(fname, [
       'QATROL COIN (QTR) WALLET',
       '========================',
@@ -220,6 +232,19 @@ async function setup() {
   }
 }
 
+// Отбор транзакций в блок: проверяем накопительно, чтобы набор взаимно
+// перерасходных транзакций не увёл баланс в минус.
+function selectPendingTxs(data) {
+  const sorted = [...(data.mempool || [])].sort((a, b) => (b.fee || 0) - (a.fee || 0)).slice(0, 200);
+  const accepted = [];
+  for (const tx of sorted) {
+    if (accepted.length >= 50) break;
+    if (bc.isNonceUsed(data.chain, tx.from, tx.nonce)) continue;
+    if (!bc.validateTx(tx, data.wallets, accepted)) accepted.push(tx);
+  }
+  return accepted;
+}
+
 // ─── Async PoW ────────────────────────────────────────────────────────────────
 function mineAsync(template, difficulty) {
   return new Promise(resolve => {
@@ -234,7 +259,8 @@ function mineAsync(template, difficulty) {
         template.nonce = nonce;
         template.hash  = bc.hashBlock(template);
         if (template.hash.startsWith(prefix)) {
-          stats.hashrate = Math.round(nonce / ((Date.now() - start) / 1000));
+          const sec = Math.max((Date.now() - start) / 1000, 0.001);
+          stats.hashrate = Math.round(nonce / sec);
           resolve({ ...template });
           return;
         }
@@ -261,6 +287,7 @@ async function runMiner() {
   ui.log(`\x1b[2mАдрес: ${minerAddress.slice(0, 20)}...\x1b[0m`);
 
   while (true) {
+   try {
     const data = loadData();
     if (!data) { await sleep(1000); continue; }
 
@@ -270,10 +297,7 @@ async function runMiner() {
     const mempool   = data.mempool || [];
 
     // Валидные транзакции из mempool
-    const pending = [...mempool]
-      .filter(tx => !bc.validateTx(tx, data.wallets, []))
-      .sort((a, b) => b.fee - a.fee)
-      .slice(0, 50);
+    const pending = selectPendingTxs(data);
 
     const totalFees = parseFloat(pending.reduce((s, t) => s + (t.fee || 0), 0).toFixed(6));
 
@@ -291,10 +315,10 @@ async function runMiner() {
       });
     }
 
-    // Награда 0.1 QTR из genesis-кошелька
-    const gen = bc.loadGenesis();
-    if (gen && gen.address) {
-      const genesisBalance = bc.getBalance(data, gen.address);
+    // Награда за блок из genesis-кошелька (адрес берём из самой цепи)
+    const genesisAddress = bc.getGenesisAddress(chain);
+    if (genesisAddress) {
+      const genesisBalance = bc.getBalance(data, genesisAddress);
       if (genesisBalance >= bc.BLOCK_REWARD) {
         const rewardTx = {
           id: 'reward_' + chain.length + '_' + crypto.randomBytes(4).toString('hex'),
@@ -337,6 +361,13 @@ async function runMiner() {
       continue;
     }
 
+    const txErr = bc.validateBlockTxs(fresh, mined);
+    if (txErr) {
+      ui.log(`[91m❌ Блок не прошёл проверку: ${txErr}[0m`);
+      log.error(`Mined block rejected by validation: ${txErr}`);
+      await sleep(1000);
+      continue;
+    }
     fresh.chain.push(mined);
     const pids = new Set(pending.map(t => t.id));
     fresh.mempool = fresh.mempool.filter(t => !pids.has(t.id));
@@ -356,7 +387,11 @@ async function runMiner() {
     log.info(`Block #${mined.index} mined | hash=${mined.hash.slice(0,16)}… | ${elapsed}s | hashrate=${stats.hashrate} H/s | reward=${bc.BLOCK_REWARD} QTR | fees=${totalFees} QTR | balance=${balance}`);
 
     // Анонсируем новый блок всем пирам немедленно
-    p2p.announceBlock(mined).catch(() => {});
+    p2p.announceBlock(mined).catch(e => log.warn('P2P announce failed', e));
+   } catch (e) {
+     log.error('Mining loop error', e);
+     await sleep(2000);
+   }
   }
 }
 
@@ -377,7 +412,16 @@ function loadData() {
   return _dataCache;
 }
 
-function setDataCache(data) { _dataCache = data; }
+let _lastChainRef = null;
+function setDataCache(data) {
+  _dataCache = data;
+  // Новая ссылка на цепь (P2P заменил её целиком) — инкрементальный кэш
+  // валидности от старой цепи больше не годится.
+  if (data && data.chain !== _lastChainRef) {
+    _lastChainRef = data.chain;
+    _validCache = { ok: true, blocks: 0, validatedUpTo: 0 };
+  }
+}
 
 // Вызывается вместо bc.save() — дебаунс 500мс
 function debouncedSave(data) {
@@ -386,7 +430,15 @@ function debouncedSave(data) {
   if (_saveTimer) return;   // уже запланировано
   _saveTimer = setTimeout(() => {
     _saveTimer = null;
-    if (_pendingSave) { bc.save(_pendingSave); _pendingSave = null; }
+    if (!_pendingSave) return;
+    try {
+      bc.save(_pendingSave);
+      _pendingSave = null;
+    } catch (e) {
+      log.error('Не удалось записать blockchain.json', e);
+      // повтор через секунду, данные всё ещё в памяти
+      _saveTimer = setTimeout(() => { _saveTimer = null; if (_pendingSave) debouncedSave(_pendingSave); }, 1000);
+    }
   }, 500);
 }
 
@@ -396,6 +448,22 @@ function immediateSave(data) {
   setDataCache(data);
   bc.save(data);
 }
+
+// Сброс несохранённого состояния при остановке процесса.
+// Без него до 500 мс принятых блоков и транзакций терялись на SIGINT.
+let _flushed = false;
+function flushPendingSave() {
+  if (_flushed) return;
+  _flushed = true;
+  if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
+  if (_pendingSave) {
+    try { bc.save(_pendingSave); _pendingSave = null; }
+    catch (e) { try { console.error('Flush failed:', e.message); } catch {} }
+  }
+}
+process.on('SIGINT',  () => { flushPendingSave(); process.exit(0); });
+process.on('SIGTERM', () => { flushPendingSave(); process.exit(0); });
+process.on('exit',    () => { if (!_flushed) flushPendingSave(); });
 
 // ─── Кэш валидации цепи (инкрементальный — только новые блоки) ───────────────
 // Полная валидация O(n) запускается только при старте или если цепь сломана.
@@ -443,16 +511,23 @@ function estimateNetworkHashrate(chain, n = 12) {
 // ─── API ──────────────────────────────────────────────────────────────────────
 function startAPI() {
   const srv = http.createServer((req, res) => {
+    // CORS только для явно разрешённого origin. Веб ходит через прокси same-origin,
+    // поэтому по умолчанию заголовок не нужен вовсе.
     const CORS = {
-      'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type,X-Session-Token',
       'Content-Type': 'application/json'
     };
+    if (process.env.QTR_CORS_ORIGIN) CORS['Access-Control-Allow-Origin'] = process.env.QTR_CORS_ORIGIN;
     if (req.method === 'OPTIONS') { res.writeHead(200, CORS); res.end(); return; }
 
     function ok(obj)         { res.writeHead(200, CORS); res.end(JSON.stringify(obj)); }
     function fail(code, msg) { res.writeHead(code, CORS); res.end(JSON.stringify({ error: msg })); }
+    // Сессионная cookie ставится сервером: HttpOnly недоступен из JS,
+    // поэтому XSS не может её прочитать (раньше cookie писала login.js).
+    function setSessionCookie(token) {
+      res.setHeader('Set-Cookie', `koin_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${7*24*3600}`);
+    }
     function body(cb) {
       // Ограничение размера: без него один POST с гигабайтом JSON съедал всю память ноды.
       const MAX_BODY = 1024 * 1024;
@@ -465,7 +540,19 @@ function startAPI() {
       });
       req.on('end', () => {
         if (tooBig) return;
-        try { cb(JSON.parse(b || '{}')); } catch { fail(400, 'Invalid JSON'); }
+        let parsed;
+        try { parsed = JSON.parse(b || '{}'); }
+        catch { return fail(400, 'Invalid JSON'); }
+        // Ошибка внутри обработчика — это 500, а не «Invalid JSON».
+        // Async-колбэки (их в пуле два) отдают promise — его тоже надо ловить,
+        // иначе Node роняет процесс на unhandled rejection.
+        try {
+          const r = cb(parsed);
+          if (r && typeof r.catch === 'function') r.catch(e => { log.error('API handler failed', e); fail(500, 'internal error'); });
+        } catch (e) {
+          log.error('API handler failed', e);
+          fail(500, 'internal error');
+        }
       });
     }
 
@@ -481,8 +568,8 @@ function startAPI() {
     // ── Public ────────────────────────────────────────────────────────────────
     if (req.method === 'GET' && url === '/stats') {
       const valid = getCachedValidity(data.chain);
-      const gen   = bc.loadGenesis();
-      const genesisBalance = gen ? bc.getBalance(data, gen.address) : 0;
+      const genesisAddress = bc.getGenesisAddress(data.chain);
+      const genesisBalance = genesisAddress ? bc.getBalance(data, genesisAddress) : 0;
       return ok({
         coin: bc.COIN_NAME, ticker: bc.COIN_TICKER,
         blocks: data.chain.length,
@@ -498,7 +585,7 @@ function startAPI() {
         blocksFound: stats.blocksFound,
         uptime: Math.floor((Date.now() - stats.startTime) / 1000),
         lastBlockTime: stats.lastBlock,
-        genesisAddress: gen?.address || null,
+        genesisAddress: genesisAddress || null,
         feePercent: bc.FEE_PERCENT * 100,
         peers: p2p.loadPeers().length,
         mining: !NO_MINE
@@ -521,6 +608,9 @@ function startAPI() {
         if (err) return ok({ accepted: false, reason: err });
         // Проверяем что хэш корректен
         if (bc.hashBlock(block) !== block.hash) return ok({ accepted: false, reason: 'bad hash' });
+        // Транзакции внутри блока: подписи, балансы, системные выплаты
+        const txErr = bc.validateBlockTxs(fresh, block);
+        if (txErr) return ok({ accepted: false, reason: txErr });
 
         fresh.chain.push(block);
         // Убираем из mempool включённые транзакции
@@ -539,8 +629,8 @@ function startAPI() {
     }
 
     if (req.method === 'GET' && url === '/chain') {
-      const limit  = Math.min(parseInt(params.get('limit') || 20), 200);
-      const offset = parseInt(params.get('offset') || 0);
+      const limit  = Math.min(Math.max(parseInt(params.get('limit')) || 20, 1), 200);
+      const offset = Math.max(parseInt(params.get('offset')) || 0, 0);
       const chain  = [...data.chain].reverse();
       return ok({ chain: chain.slice(offset, offset + limit), total: data.chain.length, limit, offset });
     }
@@ -594,7 +684,7 @@ function startAPI() {
 
     if (req.method === 'GET' && url.startsWith('/history/')) {
       const address = url.split('/history/')[1];
-      const limit   = parseInt(params.get('limit') || 50);
+      const limit   = Math.min(Math.max(parseInt(params.get('limit')) || 50, 1), 200);
       const history = bc.getHistory(data.chain, address, limit);
       const pending = data.mempool.filter(t => t.from === address || t.to === address).map(t => ({ ...t, confirmed: false, confirmations: 0 }));
       return ok({ history: [...pending, ...history], address });
@@ -605,7 +695,9 @@ function startAPI() {
     }
 
     if (req.method === 'GET' && url.startsWith('/search/')) {
-      const q = decodeURIComponent(url.split('/search/')[1]);
+      let q;
+      try { q = decodeURIComponent(url.split('/search/')[1]); }
+      catch { return fail(400, 'Некорректный запрос'); }
       const block = data.chain.find(b => b.hash === q || String(b.index) === q);
       if (block) return ok({ type: 'block', data: block });
       for (const b of data.chain) {
@@ -632,10 +724,13 @@ function startAPI() {
 
     // ── Auth ──────────────────────────────────────────────────────────────────
     if (req.method === 'POST' && url === '/auth/register') {
+      const ip = req.socket.remoteAddress || 'unknown';
+      if (!rateLimit(ip, 5, 60_000)) return fail(429, 'Слишком много регистраций, подожди минуту');
       return body(({ password, label }) => {
         const r = auth.register(password, label);
         if (r.error) return fail(400, r.error);
         if (!data.wallets[r.address]) { data.wallets[r.address] = 0; immediateSave(data); }
+        if (r.token) setSessionCookie(r.token);
         return ok(r);
       });
     }
@@ -645,6 +740,7 @@ function startAPI() {
         const r = auth.importWallet(pk, password, label);
         if (r.error) return fail(400, r.error);
         if (!data.wallets[r.address]) { data.wallets[r.address] = 0; immediateSave(data); }
+        if (r.token) setSessionCookie(r.token);
         return ok(r);
       });
     }
@@ -653,6 +749,7 @@ function startAPI() {
       return body(({ phrase, password, label }) => {
         const r = auth.restoreFromMnemonic(phrase, password, label);
         if (r.error) return fail(400, r.error);
+        if (r.token) setSessionCookie(r.token);
         return ok(r);
       });
     }
@@ -661,6 +758,7 @@ function startAPI() {
       return body(({ mnemonic, password, label }) => {
         const r = auth.restoreFromMnemonic(mnemonic, password, label);
         if (r.error) return fail(400, r.error);
+        if (r.token) setSessionCookie(r.token);
         return ok(r);
       });
     }
@@ -670,10 +768,7 @@ function startAPI() {
       const chain = data.chain;
       const prevBlock = chain[chain.length - 1];
       const mempool = data.mempool || [];
-      const pending = [...mempool]
-        .filter(tx => !bc.validateTx(tx, data.wallets, []))
-        .sort((a, b) => b.fee - a.fee)
-        .slice(0, 50);
+      const pending = selectPendingTxs(data);
       const totalFees = parseFloat(pending.reduce((s, t) => s + (t.fee || 0), 0).toFixed(6));
       const txs = [...pending];
       if (totalFees > 0) {
@@ -684,8 +779,8 @@ function startAPI() {
           memo: `Fees block #${chain.length}`
         });
       }
-      const gen = bc.loadGenesis();
-      if (gen && gen.address && bc.getBalance(data, gen.address) >= bc.BLOCK_REWARD) {
+      const genesisAddress = bc.getGenesisAddress(chain);
+      if (genesisAddress && bc.getBalance(data, genesisAddress) >= bc.BLOCK_REWARD) {
         txs.unshift({
           id: 'reward_' + chain.length + '_' + crypto.randomBytes(4).toString('hex'),
           from: 'REWARD', to: poolMiner,
@@ -706,7 +801,7 @@ function startAPI() {
 
     if (req.method === 'POST' && url === '/pool/submit-block') {
       return body(({ block, apiKey }) => {
-        if (POOL_API_KEY && apiKey !== POOL_API_KEY) return fail(403, 'Invalid pool api key');
+        if (!poolAuthorized(req, apiKey)) return fail(403, 'Invalid pool api key');
         if (!block || typeof block !== 'object') return fail(400, 'Нужен объект block');
         const fresh = loadData();
         if (!fresh || !fresh.chain) return fail(503, 'not ready');
@@ -724,6 +819,8 @@ function startAPI() {
         if (!candidate.hash) candidate.hash = bc.hashBlock(candidate);
         const err = bc.validateBlock(candidate, prev);
         if (err) return fail(400, `bad block: ${err}`);
+        const txErr = bc.validateBlockTxs(fresh, candidate);
+        if (txErr) return fail(400, `bad block: ${txErr}`);
         fresh.chain.push(candidate);
         const ids = new Set(candidate.transactions.map(t => t.id));
         fresh.mempool = fresh.mempool.filter(t => !ids.has(t.id));
@@ -739,10 +836,11 @@ function startAPI() {
 
     if (req.method === 'POST' && url === '/pool/add-tx') {
       return body(({ tx, apiKey }) => {
-        if (POOL_API_KEY && apiKey !== POOL_API_KEY) return fail(403, 'Invalid pool api key');
+        if (!poolAuthorized(req, apiKey)) return fail(403, 'Invalid pool api key');
         if (!tx || typeof tx !== 'object') return fail(400, 'Нужен объект tx');
         const err = bc.validateTx(tx, data.wallets, data.mempool);
         if (err) return fail(400, `invalid tx: ${err}`);
+        if (bc.isNonceUsed(data.chain, tx.from, tx.nonce)) return fail(400, 'nonce already mined');
         if (data.mempool.some(t => t.id === tx.id)) return fail(400, 'duplicate tx');
         data.mempool.push(tx);
         immediateSave(data);
@@ -751,10 +849,13 @@ function startAPI() {
     }
 
     if (req.method === 'POST' && url === '/auth/login') {
+      const ip = req.socket.remoteAddress || 'unknown';
+      if (!rateLimit(ip, 10, 60_000)) return fail(429, 'Слишком много попыток входа, подожди минуту');
       return body(({ address, password }) => {
         if (!address || !password) return fail(400, 'Нужны address и password');
         const r = auth.login(address, password);
         if (r.error) return fail(401, r.error);
+        if (r.token) setSessionCookie(r.token);
         return ok(r);
       });
     }
@@ -780,6 +881,8 @@ function startAPI() {
 
     // ── Protected ─────────────────────────────────────────────────────────────
     if (req.method === 'POST' && url === '/send') {
+      const ip = req.socket.remoteAddress || 'unknown';
+      if (!rateLimit(ip, 20, 60_000)) return fail(429, 'Слишком много переводов, подожди минуту');
       if (!sess.address) return fail(401, 'Требуется авторизация');
       return body(({ to, amount, memo, password }) => {
         const from = sess.address;
@@ -787,8 +890,9 @@ function startAPI() {
         // Адрес: K и 39 hex-символов в текущей схеме, 40 у старых (genesis) адресов.
         if (typeof to !== 'string' || !/^K[0-9A-F]{39,40}$/.test(to)) return fail(400, 'Некорректный адрес получателя');
         amount = parseFloat(amount);
-        if (isNaN(amount) || amount <= 0) return fail(400, 'Некорректная сумма');
+        if (!Number.isFinite(amount) || amount <= 0) return fail(400, 'Некорректная сумма');
         if (from === to) return fail(400, 'Нельзя отправить себе');
+        if (memo !== undefined && typeof memo !== 'string') return fail(400, 'Заметка должна быть строкой');
 
         const privKey = auth.getPrivateKey(from, password);
         if (!privKey) return fail(400, 'Неверный пароль');
@@ -809,7 +913,7 @@ function startAPI() {
           timestamp: Date.now(),
           nonce: crypto.randomBytes(4).readUInt32BE(0),
           publicKey: derived.publicKey,
-          memo: memo || ''
+          memo: (memo || '').slice(0, 200)
         };
         tx.signature = ecdsa.sign(ecdsa.txSignData(tx), privKey);
         if (!tx.signature) return fail(500, 'Ошибка подписи');
@@ -858,7 +962,7 @@ function saveWalletBackup(role, isGenesis) {
 
   // Genesis-кошелёк сохраняем отдельно и ВСЕГДА (он нужен как резерв)
   if (isGenesis) {
-    const genesisFile = 'GENESIS_WALLET_BACKUP.json';
+    const genesisFile = path.join(__dirname, 'GENESIS_WALLET_BACKUP.json');
     fs.writeFileSync(genesisFile, JSON.stringify(walletData, null, 2));
     log.info(`Genesis wallet backup saved → ${genesisFile} (${minerAddress})`);
     console.log(`\x1b[93m  🔑 Genesis backup: ${genesisFile}  ← СОХРАНИ ЭТОТ ФАЙЛ!\x1b[0m`);
@@ -870,21 +974,26 @@ function saveWalletBackup(role, isGenesis) {
   await setup();
 
   // Проверяем ДО bc.init(), потому что bc.init() создаёт blockchain.json
-  const isFirstRun = !fs.existsSync('blockchain.json');
+  const isFirstRun = !fs.existsSync(bc.DB_FILE);
+
+  if (!minerAddress && isFirstRun) {
+    console.error('\x1b[91mПервый запуск требует адрес или ключ: задайте QTR_MINER_ADDRESS / QTR_MINER_PRIVATE_KEY\x1b[0m');
+    process.exit(1);
+  }
 
   bc.init(minerAddress);
 
   const isGenesisWallet = isFirstRun; // первый запуск → этот кошелёк получил 1B QTR
 
-  if (!bc.loadGenesis()) bc.saveGenesis({ address: minerAddress, createdAt: Date.now() });
+  if (minerAddress) bc.ensureGenesisFile(loadData()?.chain);
 
   // ── Сохранение кошельков в JSON ───────────────────────────────────────────
-  saveWalletBackup(isGenesisWallet ? 'genesis_and_miner' : 'miner', isGenesisWallet);
+  if (minerAddress) saveWalletBackup(isGenesisWallet ? 'genesis_and_miner' : 'miner', isGenesisWallet);
 
   log.info(`Node started. minerAddress=${minerAddress} firstRun=${isFirstRun}`);
 
   const data = loadData();
-  if (!data.wallets[minerAddress]) { data.wallets[minerAddress] = 0; immediateSave(data); }
+  if (minerAddress && data.wallets[minerAddress] === undefined) { data.wallets[minerAddress] = 0; immediateSave(data); }
   const peerArg = process.argv.find((a, i) => process.argv[i - 1] === '--peer');
   if (peerArg) p2p.addPeer(peerArg);
   startAPI();
@@ -901,4 +1010,14 @@ function saveWalletBackup(role, isGenesis) {
   } else {
     await runMiner();
   }
-})();
+})().catch(err => {
+  log.error('Node crashed', err);
+  console.error('\x1b[91mНода упала:\x1b[0m', err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', err => {
+  log.error('Unhandled rejection', err);
+  console.error('\x1b[91mUnhandled rejection:\x1b[0m', err);
+  process.exit(1);
+});

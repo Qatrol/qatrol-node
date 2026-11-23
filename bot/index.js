@@ -49,7 +49,12 @@ const BOT_UPLOAD_TIMEOUT_MS = parseInt(process.env.QTR_BOT_UPLOAD_TIMEOUT_MS || 
 if (!TOKEN) { console.error('❌ Need QTR_BOT_TOKEN'); process.exit(1); }
 
 // ─── Admin & contest ──────────────────────────────────────────────────────────
-const ADMIN_ID     = 8387259474;
+const ADMIN_ID     = Number(process.env.QTR_BOT_ADMIN_ID) || 8387259474;
+
+// Пароль для перевода держим только в памяти процесса: в bot_users.json он
+// раньше оставался навсегда, а файл с токенами всех пользователей уходил в git.
+const _pendingPasswords = new Map(); // chatId -> { password, expiresAt }
+const PENDING_PASSWORD_TTL = 10 * 60_000;
 const CONTEST_FILE = path.join(PROJECT_ROOT, 'bot_contest.json');
 
 function isAdmin(chatId) { return Number(chatId) === ADMIN_ID; }
@@ -1147,7 +1152,15 @@ bot.on('callback_query', async (q) => {
   if (data === 'confirm_send') {
     const user = getUser(chatId);
     if (!user?.pendingSend) return;
-    const { to, amount, password } = user.pendingSend;
+    const { to, amount } = user.pendingSend;
+    const pend = _pendingPasswords.get(chatId);
+    const password = pend && pend.expiresAt > Date.now() ? pend.password : null;
+    _pendingPasswords.delete(chatId);
+    if (!password) {
+      bot.sendMessage(chatId, tBot('wallet.error', lang, { error: 'Пароль истёк — начни перевод заново' }), getMainMenu(lang));
+      setUser(chatId, { pendingSend: null, state: null });
+      return;
+    }
     const res = await apiRequest('/send', 'POST', { to, amount: parseFloat(amount), password }, user.token);
     if (res.error) {
       log.error(`Send TX failed: chatId=${chatId} from=${user.address} to=${to} amount=${amount}: ${res.error}`);
@@ -1327,7 +1340,8 @@ bot.on('message', async (msg) => {
   if (user.state === 'awaiting_send_password') {
     const { to, amount } = user.pendingSend;
     const fee = Math.max(0.0001, parseFloat((amount * 0.001).toFixed(6)));
-    setUser(chatId, { pendingSend: { ...user.pendingSend, password: text }, state: null });
+    _pendingPasswords.set(chatId, { password: text, expiresAt: Date.now() + PENDING_PASSWORD_TTL });
+    setUser(chatId, { pendingSend: { to, amount }, state: null });
     bot.sendMessage(chatId,
       tBot('send.confirm', lang, {
         to:    short(to),

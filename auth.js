@@ -5,6 +5,7 @@ const fs       = require('fs');
 const path     = require('path');
 const ecdsa    = require('./crypto/ecdsa');
 const mn       = require('./crypto/mnemonic');
+const { readJson, writeJsonAtomic } = require('./lib/storage');
 
 // Файлы данных всегда рядом с кодом, а не в текущем каталоге процесса:
 // иначе запуск `node /opt/qatrol/miner.js` из другого каталога создаёт пустые кошельки.
@@ -37,11 +38,12 @@ function decryptKey(enc, password) {
 // ─── Хранилище ───────────────────────────────────────────────────────────────
 
 function loadWallets() {
-  if (!fs.existsSync(WALLETS_FILE)) return {};
-  try { return JSON.parse(fs.readFileSync(WALLETS_FILE, 'utf8')); }
-  catch { return {}; }
+  // Битый wallets.json — исключение, а не пустой объект: иначе следующая
+  // регистрация перезапишет файл и все зашифрованные ключи пропадут.
+  const r = readJson(WALLETS_FILE);
+  return r.data || {};
 }
-function saveWallets(w) { fs.writeFileSync(WALLETS_FILE, JSON.stringify(w, null, 2)); }
+function saveWallets(w) { writeJsonAtomic(WALLETS_FILE, w); }
 
 // ─── Сессии ──────────────────────────────────────────────────────────────────
 
@@ -59,8 +61,11 @@ function loadSessions() {
   if (_sessionsCache && m === _sessionsMtime) return _sessionsCache;
   if (m === 0) { _sessionsCache = {}; _sessionsMtime = 0; return _sessionsCache; }
   try {
-    _sessionsCache = JSON.parse(fs.readFileSync(SESSIONS_FILE, 'utf8'));
-  } catch {
+    _sessionsCache = readJson(SESSIONS_FILE).data || {};
+  } catch (err) {
+    // Сессии восстановимы (заново войти), поэтому не роняем ноду,
+    // но громко пишем и оставляем бэкап — readJson его уже сделал.
+    console.error('sessions.json повреждён, все сессии сброшены:', err.message);
     _sessionsCache = {};
   }
   _sessionsMtime = m;
@@ -69,8 +74,14 @@ function loadSessions() {
 
 function saveSessions(s) {
   _sessionsCache = s;
-  fs.writeFileSync(SESSIONS_FILE, JSON.stringify(s, null, 2));
-  _sessionsMtime = sessionsMtime();
+  try {
+    writeJsonAtomic(SESSIONS_FILE, s);
+    _sessionsMtime = sessionsMtime();
+  } catch (err) {
+    // Не смогли сохранить сессию — пользователь перелогинится,
+    // а падение ноды из-за этого недопустимо.
+    console.error('Не удалось сохранить sessions.json:', err.message);
+  }
 }
 
 function createSession(address) {
@@ -118,7 +129,7 @@ function getSessionFromReq(req) {
 // ─── Регистрация ──────────────────────────────────────────────────────────────
 
 function register(password, label) {
-  if (!password || password.length < 6) return { error: 'Пароль минимум 6 символов' };
+  if (typeof password !== 'string' || password.length < 8) return { error: 'Пароль минимум 8 символов' };
   const kp     = ecdsa.generateKeyPair();
   const phrase = mn.generateMnemonic();
   const enc    = encryptKey(kp.privateKey, password);
@@ -130,8 +141,8 @@ function register(password, label) {
 }
 
 function importWallet(privateKeyHex, password, label) {
-  if (!privateKeyHex) return { error: 'Нужен приватный ключ' };
-  if (!password || password.length < 6) return { error: 'Пароль минимум 6 символов' };
+  if (!privateKeyHex || typeof privateKeyHex !== 'string') return { error: 'Нужен приватный ключ' };
+  if (typeof password !== 'string' || password.length < 8) return { error: 'Пароль минимум 8 символов' };
   const derived = ecdsa.addressFromPrivate(privateKeyHex);
   if (!derived) return { error: 'Неверный приватный ключ' };
   const enc     = encryptKey(privateKeyHex, password);
@@ -142,8 +153,8 @@ function importWallet(privateKeyHex, password, label) {
 }
 
 function restoreFromMnemonic(phrase, password, label) {
-  if (!mn.validateMnemonic(phrase)) return { error: 'Неверная мнемоническая фраза (12 слов)' };
-  if (!password || password.length < 6) return { error: 'Пароль минимум 6 символов' };
+  if (typeof phrase !== 'string' || !mn.validateMnemonic(phrase)) return { error: 'Неверная мнемоническая фраза (12 слов)' };
+  if (typeof password !== 'string' || password.length < 8) return { error: 'Пароль минимум 8 символов' };
   const normalized = phrase.trim().toLowerCase().split(/\s+/).join(' ');
   const seed = mn.mnemonicToSeed(normalized);
   const kp = ecdsa.deriveKeyPairFromSeed(seed);

@@ -217,10 +217,22 @@ function updateSelfTargets() {
 }
 
 async function doSubmit(nonce, jobId, isBlock) {
-  const result = await poolRequest('/pool/submit', 'POST', {
-    address: myAddress, nonce, jobId, hashrate: totalHashrate()
-  });
-  if (!result) return;
+  const payload = { address: myAddress, nonce, jobId, hashrate: totalHashrate() };
+  // Блок — это деньги: при обрыве связи повторяем, а не выбрасываем.
+  const attempts = isBlock ? 5 : 1;
+  let result = null;
+  for (let i = 0; i < attempts; i++) {
+    result = await poolRequest('/pool/submit', 'POST', payload);
+    if (result) break;
+    if (i < attempts - 1) await sleep(1000 * (i + 1));
+  }
+  if (!result) {
+    console.log(R(`\n  ❌ ${isBlock ? 'Блок найден, но пул не ответил' : 'Шара не отправлена'} — связь с пулом потеряна\n`));
+    return;
+  }
+  if (!result.accepted && result.reason && result.reason !== 'duplicate share') {
+    console.log(D(`\n  ↩ ${isBlock ? 'Блок' : 'Шара'} отклонены пулом: ${result.reason}\n`));
+  }
 
   if (result.accepted) {
     totalShares++;
@@ -237,15 +249,17 @@ async function doSubmit(nonce, jobId, isBlock) {
 }
 
 function spawnWorkers(job) {
-  for (let i = 0; i < NUM_THREADS; i++) {
+  for (let i = 0; i < NUM_THREADS; i++) createWorker(i, job);
+}
+
+function createWorker(idx, job) {
+  {
     const { port1, port2 } = new MessageChannel();
     const startNonce = (Math.random() * 0xFFFFFFFF) >>> 0;
     const w = new Worker(__filename, {
       workerData: { port: port2, initialJob: job, startNonce },
       transferList: [port2]
     });
-
-    const idx = i;
     w.on('message', msg => {
       if (msg.type === 'hashrate') {
         threadHR[idx] = msg.hr;
@@ -261,18 +275,29 @@ function spawnWorkers(job) {
         // ── БЛОК: отправляем немедленно, не ждём sharesBusy ──────────────────
         if (!blockPending) {
           blockPending = true;
-          doSubmit(msg.nonce, msg.jobId, true).finally(() => { blockPending = false; });
+          doSubmit(msg.nonce, msg.jobId, true)
+            .catch(e => console.error('block submit:', e.message))
+            .finally(() => { blockPending = false; });
         }
       } else {
         // ── Шара: только если не занята отправка предыдущей ──────────────────
         if (!sharesBusy) {
           sharesBusy = true;
-          doSubmit(msg.nonce, msg.jobId, false).finally(() => { sharesBusy = false; });
+          doSubmit(msg.nonce, msg.jobId, false)
+            .catch(e => console.error('share submit:', e.message))
+            .finally(() => { sharesBusy = false; });
         }
         // иначе — просто пропускаем. hashrate нам важнее статистики шар
       }
     });
     w.on('error', err => console.error(`\nWorker #${idx}: ${err.message}`));
+    // Умерший поток раньше просто снижал хэшрейт, а дашборд врал про аптайм.
+    w.on('exit', code => {
+      if (!mining || code === 0) return;
+      console.error(R(`\n  ⚠ Поток #${idx} упал (код ${code}), перезапускаю…`));
+      threadHR[idx] = 0;
+      setTimeout(() => { if (mining) createWorker(idx, currentJob); }, 2000);
+    });
     workerList.push({ worker: w, port: port1 });
   }
 }
@@ -296,21 +321,34 @@ function stopWorkers() {
 async function run() {
   // Получаем первое задание и запускаем воркеры
   let job = null;
+  let poolDownLogged = false;
   while (!job) {
     const res = await poolRequest('/pool/job', 'POST', { address: myAddress });
-    if (res?.job) { job = res.job; }
-    else { console.log(R('\n  ❌ Пул недоступен. Повтор через 5с...')); await sleep(5000); }
+    if (res?.job) { job = res.job; if (poolDownLogged) console.log(G('\n  ✅ Пул снова на связи')); }
+    else {
+      if (!poolDownLogged) { console.log(R('\n  ❌ Пул недоступен. Повторяю каждые 5 секунд...')); poolDownLogged = true; }
+      await sleep(5000);
+    }
   }
   currentJob = job;
   renderDashboard();
   spawnWorkers(job);
 
   // Обновление задания каждые 10 сек (синхронно с сервером)
+  let misses = 0;
   while (mining) {
     await sleep(10_000);
     if (!mining) break;
     const res = await poolRequest('/pool/job', 'POST', { address: myAddress });
-    if (res?.job && res.job.jobId !== currentJob?.jobId) {
+    if (!res?.job) {
+      misses++;
+      if (misses === 3 || misses % 12 === 0) {
+        console.log(R(`\n  ⚠ Пул не отвечает (${misses} попыток подряд) — майнер работает на старом задании\n`));
+      }
+      continue;
+    }
+    if (misses > 0) { console.log(G('\n  ✅ Пул снова на связи\n')); misses = 0; }
+    if (res.job.jobId !== currentJob?.jobId) {
       currentJob = res.job;
       sendJobToWorkers(res.job);
       renderDashboard();

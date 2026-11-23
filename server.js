@@ -5,22 +5,46 @@ const path = require('path');
 
 const PORT      = parseInt(process.env.QTR_WEB_PORT || '3000');
 const MINER_API = {
-  hostname: process.env.QTR_API_HOST || 'localhost',
+  hostname: process.env.QTR_API_HOST || '127.0.0.1',
   port: parseInt(process.env.QTR_PORT || '3001')
 };
 const POOL_API = {
-  hostname: process.env.QTR_POOL_HOST || 'localhost',
+  hostname: process.env.QTR_POOL_HOST || '127.0.0.1',
   port: parseInt(process.env.QTR_POOL_PORT || process.env.POOL_PORT || '3002')
 };
 
+const MAX_PROXY_BODY = 1024 * 1024;   // нода и так режет на 1 МБ, не копим больше здесь
+const MAX_PROXY_RESP = 16 * 1024 * 1024;
+const PROXY_TIMEOUT  = 10_000;
+
 function proxyMiner(req, res, targetPath) {
   return new Promise(resolve => {
-    const opts = { ...MINER_API, path: targetPath, method: req.method, headers: { 'Content-Type': 'application/json', 'Cookie': req.headers.cookie||'', 'X-Session-Token': req.headers['x-session-token']||'' } };
+    const opts = {
+      ...MINER_API,
+      path: targetPath,
+      method: req.method,
+      timeout: PROXY_TIMEOUT,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cookie': req.headers.cookie || '',
+        'X-Session-Token': req.headers['x-session-token'] || ''
+      }
+    };
     const proxy = http.request(opts, proxyRes => {
       let d = '';
-      proxyRes.on('data', c => d += c);
+      let tooBig = false;
+      proxyRes.on('data', c => {
+        if (tooBig) return;
+        d += c;
+        if (d.length > MAX_PROXY_RESP) { tooBig = true; proxyRes.destroy(); }
+      });
       proxyRes.on('end', () => {
-        res.writeHead(proxyRes.statusCode, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' });
+        if (tooBig) { res.writeHead(502); res.end('{"error":"Ответ ноды слишком большой"}'); return resolve(); }
+        const headers = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
+        if (process.env.QTR_CORS_ORIGIN) headers['Access-Control-Allow-Origin'] = process.env.QTR_CORS_ORIGIN;
+        // Прокси не должен терять HttpOnly-cookie, которую ставит нода при логине
+        if (proxyRes.headers['set-cookie']) headers['Set-Cookie'] = proxyRes.headers['set-cookie'];
+        res.writeHead(proxyRes.statusCode, headers);
         res.end(d);
         resolve();
       });
@@ -30,10 +54,31 @@ function proxyMiner(req, res, targetPath) {
       res.end(JSON.stringify({ error: 'Нода недоступна. Запустите: node miner.js', offline: true }));
       resolve();
     });
+    proxy.on('timeout', () => {
+      proxy.destroy(new Error('timeout'));
+      if (!res.headersSent) {
+        res.writeHead(504, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Нода не ответила вовремя', timeout: true }));
+      }
+      resolve();
+    });
     if (req.method === 'POST' || req.method === 'PUT') {
       let b = '';
-      req.on('data', c => b += c);
-      req.on('end', () => { proxy.write(b); proxy.end(); });
+      let tooBig = false;
+      req.on('data', c => {
+        if (tooBig) return;
+        b += c;
+        if (b.length > MAX_PROXY_BODY) {
+          tooBig = true;
+          res.writeHead(413, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Тело запроса больше 1 МБ' }));
+        }
+      });
+      req.on('end', () => {
+        if (tooBig) return resolve();
+        proxy.write(b);
+        proxy.end();
+      });
     } else { proxy.end(); }
   });
 }
@@ -56,15 +101,25 @@ function safePublicPath(rawUrl) {
 
 function serveFile(res, filePath) {
   if (!filePath) return false;
-  if (!fs.existsSync(filePath)||!fs.statSync(filePath).isFile()) return false;
+  try {
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return false;
+  } catch { return false; }
+  const stream = fs.createReadStream(filePath);
+  // Без обработчика 'error' гонка «файл исчез между stat и read» роняла веб-сервер
+  stream.on('error', () => {
+    if (!res.headersSent) res.writeHead(404);
+    res.end();
+  });
   res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)]||'text/plain', 'Cache-Control': 'no-cache' });
-  fs.createReadStream(filePath).pipe(res);
+  stream.pipe(res);
   return true;
 }
 
 const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
-    res.writeHead(200, { 'Access-Control-Allow-Origin':'*', 'Access-Control-Allow-Methods':'GET,POST,DELETE,OPTIONS', 'Access-Control-Allow-Headers':'Content-Type,X-Session-Token' });
+    const optHeaders = { 'Access-Control-Allow-Methods':'GET,POST,DELETE,OPTIONS', 'Access-Control-Allow-Headers':'Content-Type,X-Session-Token' };
+    if (process.env.QTR_CORS_ORIGIN) optHeaders['Access-Control-Allow-Origin'] = process.env.QTR_CORS_ORIGIN;
+    res.writeHead(200, optHeaders);
     res.end(); return;
   }
   const url = req.url.split('?')[0];
@@ -78,21 +133,33 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, {
       'Content-Type': 'application/octet-stream',
       'Content-Disposition': 'attachment; filename="qtr-pool-miner.exe"',
-      'Cache-Control': 'public, max-age=600',
-      'Access-Control-Allow-Origin': '*'
+      'Cache-Control': 'public, max-age=600'
     });
-    fs.createReadStream(exe).pipe(res);
+    const exeStream = fs.createReadStream(exe);
+    exeStream.on('error', () => { if (!res.headersSent) res.writeHead(404); res.end(); });
+    exeStream.pipe(res);
     return;
   }
   if (url.startsWith('/api/')) { await proxyMiner(req, res, req.url.replace('/api','')); return; }
   if (url.startsWith('/pool/')) {
     return new Promise(resolve => {
       const opts = { ...POOL_API, path: req.url, method: req.method, headers: { 'Content-Type': 'application/json' } };
-      const proxy = http.request(opts, proxyRes => {
-        let d = ''; proxyRes.on('data', c => d += c);
-        proxyRes.on('end', () => { res.writeHead(proxyRes.statusCode, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }); res.end(d); resolve(); });
+      const proxy = http.request({ ...opts, timeout: PROXY_TIMEOUT }, proxyRes => {
+        let d = ''; let tooBig = false;
+        proxyRes.on('data', c => {
+          if (tooBig) return;
+          d += c;
+          if (d.length > MAX_PROXY_RESP) { tooBig = true; proxyRes.destroy(); }
+        });
+        proxyRes.on('end', () => {
+          if (tooBig) { res.writeHead(502); res.end('{"error":"Ответ пула слишком большой"}'); return resolve(); }
+          const headers = { 'Content-Type': 'application/json' };
+          if (process.env.QTR_CORS_ORIGIN) headers['Access-Control-Allow-Origin'] = process.env.QTR_CORS_ORIGIN;
+          res.writeHead(proxyRes.statusCode, headers); res.end(d); resolve();
+        });
       });
       proxy.on('error', () => { res.writeHead(503, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Пул недоступен' })); resolve(); });
+      proxy.on('timeout', () => { proxy.destroy(new Error('timeout')); if (!res.headersSent) { res.writeHead(504, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Пул не ответил вовремя' })); } resolve(); });
       if (req.method === 'POST') { let b = ''; req.on('data', c => b += c); req.on('end', () => { proxy.write(b); proxy.end(); }); } else { proxy.end(); }
     });
   }

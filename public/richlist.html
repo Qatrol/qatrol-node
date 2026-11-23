@@ -138,12 +138,20 @@ a{color:inherit;text-decoration:none}
 <script>
 let genesisAddr = null;
 
+function esc(v){
+  return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function safeId(v){
+  return String(v ?? '').replace(/[^A-Za-z0-9_-]/g, '');
+}
+
 function short(addr) {
   if (!addr) return '—';
   return addr.slice(0,10)+'…'+addr.slice(-6);
 }
 
 function fmtNum(n) {
+  if (n >= 1e9) return (n/1e9).toFixed(2)+'B';
   if (n >= 1e6) return (n/1e6).toFixed(2)+'M';
   if (n >= 1e3) return (n/1e3).toFixed(1)+'k';
   return n.toLocaleString('ru');
@@ -231,12 +239,12 @@ async function load() {
           <div class="rank ${cls}">${icon}</div>
           <div class="addr">
             <span class="addr-short">
-              ${short(w.address)}${isGenesis ? '<span class="genesis-badge">genesis</span>' : ''}
-              <button class="copy-btn" onclick="copyAddr('${w.address}',this)">⎘ ${copyLabel}</button>
+              ${esc(short(w.address))}${isGenesis ? '<span class="genesis-badge">genesis</span>' : ''}
+              <button class="copy-btn" onclick="copyAddr('${safeId(w.address)}',this)">⎘ ${esc(copyLabel)}</button>
             </span>
-            <span class="addr-full" title="${w.address}">
-              ${w.address}${isGenesis ? '<span class="genesis-badge">genesis</span>' : ''}
-              <button class="copy-btn" onclick="copyAddr('${w.address}',this)">⎘ ${copyLabel}</button>
+            <span class="addr-full" title="${esc(w.address)}">
+              ${esc(w.address)}${isGenesis ? '<span class="genesis-badge">genesis</span>' : ''}
+              <button class="copy-btn" onclick="copyAddr('${safeId(w.address)}',this)">⎘ ${esc(copyLabel)}</button>
             </span>
           </div>
           <div class="balance-val">${balNum.toLocaleString('ru', {maximumFractionDigits:4})}</div>

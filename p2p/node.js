@@ -3,39 +3,74 @@
 const http = require('http');
 const fs   = require('fs');
 const bc   = require('../blockchain');
+const { readJson, writeJsonAtomic } = require('../lib/storage');
 
 const PEERS_FILE    = require('path').join(__dirname, '..', 'peers.json');
 const SYNC_INTERVAL = 10_000; // ms между циклами синхронизации
 const MAX_PEERS     = 50;     // максимум пиров
 const REQ_TIMEOUT   = 4_000;  // таймаут запроса к пиру
+const MAX_RESPONSE  = 4 * 1024 * 1024; // больше — обрываем: пир может отдать гигабайты
 
-// Bootstrap peers — всегда стартуем с главной ноды.
-// Добавь сюда все известные стабильные ноды сети.
-const BOOTSTRAP_PEERS = [
-  'http://95.163.226.148:3001'
-];
+// Bootstrap-пиры задаются через QTR_BOOTSTRAP_PEERS (через запятую).
+// Раньше здесь был захардкожен адрес одной частной ноды: каждая свежая
+// установка пыталась синхронизироваться с чужим сервером.
+const BOOTSTRAP_PEERS = (process.env.QTR_BOOTSTRAP_PEERS || '')
+  .split(',').map(s => s.trim()).filter(Boolean);
 
 // ─── Хранение пиров ──────────────────────────────────────────────────────────
 function loadPeers() {
   let peers = [];
-  if (fs.existsSync(PEERS_FILE)) {
-    try { peers = JSON.parse(fs.readFileSync(PEERS_FILE, 'utf8')); } catch {}
+  try {
+    peers = readJson(PEERS_FILE).data || [];
+  } catch (err) {
+    // Битый peers.json — не повод падать: список пиров восстановим.
+    // readJson уже сохранил копию .corrupt-<ts>.
+    console.error('peers.json повреждён, список пиров сброшен:', err.message);
+    peers = [];
   }
-  // Bootstrap только если peers.json пуст — чтобы главный сервер не добавлял себя
-  const base = peers.length > 0 ? peers : BOOTSTRAP_PEERS;
+  // Bootstrap добавляем к своим пирам, а не вместо них
+  const base = [...peers, ...BOOTSTRAP_PEERS];
   return [...new Set(base)].filter(isValidPeerUrl).slice(0, MAX_PEERS);
 }
 
 function savePeers(peers) {
   const clean = [...new Set(peers)].slice(0, MAX_PEERS);
-  fs.writeFileSync(PEERS_FILE, JSON.stringify(clean, null, 2));
+  try { writeJsonAtomic(PEERS_FILE, clean); }
+  catch (err) { console.error('Не удалось сохранить peers.json:', err.message); }
+}
+
+function isPrivateHost(hostname) {
+  const h = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '');
+  if (!h) return true;
+  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local')) return true;
+
+  // IPv4: 0/8, 10/8, 100.64/10, 127/8, 169.254/16, 172.16/12, 192.168/16, 224+
+  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m) {
+    const [a, b] = [Number(m[1]), Number(m[2])];
+    if (a === 0 || a === 10 || a === 127 || a >= 224) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true;
+    return false;
+  }
+  // Числовые формы вида 2130706433 уже отсекаются: это не hostname с точками
+  if (/^\d+$/.test(h)) return true;
+  // IPv6: loopback, link-local, ULA, "::"
+  if (h === '::' || h === '::1' || h.startsWith('fe80:') || h.startsWith('fc') || h.startsWith('fd')) return true;
+  return false;
 }
 
 function isValidPeerUrl(u) {
   try {
     const url = new URL(u);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
-    if (!url.hostname || url.hostname === 'localhost' || url.hostname === '127.0.0.1') return false;
+    // peerRequest ходит только по http; https-пиры раньше молча не работали
+    if (url.protocol !== 'http:') return false;
+    if (!url.hostname) return false;
+    if (isPrivateHost(url.hostname)) return false;
+    const port = Number(url.port || 3001);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) return false;
     // Не добавляем себя
     const myHost = process.env.QTR_PUBLIC_HOST;
     if (myHost && url.hostname === myHost) return false;
@@ -66,8 +101,16 @@ function peerRequest(peerUrl, path, method = 'GET', body = null) {
       };
       const req = http.request(opts, res => {
         let data = '';
-        res.on('data', c => data += c);
-        res.on('end', () => { try { resolve(JSON.parse(data)); } catch { resolve(null); } });
+        let tooBig = false;
+        res.on('data', c => {
+          if (tooBig) return;
+          data += c;
+          if (data.length > MAX_RESPONSE) { tooBig = true; data = ''; req.destroy(); resolve(null); }
+        });
+        res.on('end', () => {
+          if (tooBig) return;
+          try { resolve(JSON.parse(data)); } catch { resolve(null); }
+        });
       });
       req.on('error', () => resolve(null));
       req.on('timeout', () => { req.destroy(); resolve(null); });
@@ -91,7 +134,7 @@ async function syncWithPeer(peerUrl, myApiPort) {
   if (!peerStats || !peerStats.blocks) return false;
 
   // Обменяться пирами (gossip)
-  if (myApiPort) {
+  if (myApiPort && process.env.QTR_PUBLIC_HOST) {
     const myUrl = `http://${getMyPublicHost()}:${myApiPort}`;
     await peerRequest(peerUrl, '/peers/add', 'POST', { url: myUrl });
     const theirPeers = await peerRequest(peerUrl, '/peers');
@@ -110,19 +153,19 @@ async function syncWithPeer(peerUrl, myApiPort) {
     const peerChain = await peerRequest(peerUrl, '/chain/p2p');
     if (!peerChain?.chain) return false;
 
-    const validation = bc.validateChain(peerChain.chain);
-    if (!validation.ok) {
-      console.log(`⚠️  P2P: невалидная цепочка от ${peerUrl}: ${validation.reason} (блок ${validation.index})`);
-      return false;
-    }
-
     if (peerChain.chain.length > data.chain.length) {
-      // Пересчитываем балансы с нуля — не доверяем данным пира
-      const newData = { chain: peerChain.chain, mempool: data.mempool, wallets: {} };
-      for (const block of newData.chain) bc.applyBlock(newData, block);
+      // importChain сверяет genesis, структуру, PoW, сложность и каждую
+      // транзакцию; балансы пересчитываются с нуля.
+      const imported = bc.importChain(peerChain.chain);
+      if (imported.error) {
+        console.log(`⚠️  P2P: цепь от ${peerUrl} отклонена: ${imported.error}`);
+        return false;
+      }
+      const newData = imported.data;
+      newData.mempool = data.mempool || [];
 
       // Удаляем из mempool транзакции уже включённые в новую цепь
-      const txInChain = new Set(newData.chain.flatMap(b => b.transactions.map(t => t.id)));
+      const txInChain = new Set(newData.chain.flatMap(b => (b.transactions || []).map(t => t.id)));
       newData.mempool = newData.mempool.filter(t => !txInChain.has(t.id));
 
       _dm.save(newData); // обновляет и кэш и файл
@@ -133,14 +176,16 @@ async function syncWithPeer(peerUrl, myApiPort) {
 
   // Синхронизируем mempool
   const peerMempool = await peerRequest(peerUrl, '/mempool');
-  if (peerMempool?.mempool) {
+  if (peerMempool?.mempool && Array.isArray(peerMempool.mempool)) {
     const data2  = _dm.load();
+    if (!data2 || !Array.isArray(data2.mempool)) return false;
     const ownIds = new Set(data2.mempool.map(t => t.id));
     let added = 0;
     for (const tx of peerMempool.mempool) {
+      if (data2.mempool.length >= 1000) break; // защита от заваливания мемпула
       if (!ownIds.has(tx.id)) {
         const err = bc.validateTx(tx, data2.wallets, data2.mempool);
-        if (!err) { data2.mempool.push(tx); added++; }
+        if (!err) { data2.mempool.push(tx); ownIds.add(tx.id); added++; }
       }
     }
     if (added > 0) { _dm.save(data2); console.log(`📨 P2P: +${added} транзакций из mempool`); }
@@ -173,9 +218,19 @@ function startSync(myApiPort, dataManager) {
   const peers = loadPeers();
   if (peers.length > 0) console.log(`🌐 P2P: пиры: ${peers.join(', ')}`);
 
+  // Без флага циклы накладывались друг на друга при медленных пирах:
+  // 50 пиров × 4 с таймаута при интервале 10 с = десятки параллельных проходов.
+  let syncing = false;
   setInterval(async () => {
-    for (const peer of loadPeers()) {
-      try { await syncWithPeer(peer, myApiPort); } catch {}
+    if (syncing) return;
+    syncing = true;
+    try {
+      for (const peer of loadPeers()) {
+        try { await syncWithPeer(peer, myApiPort); }
+        catch (e) { console.log(`⚠️  P2P: синхронизация с ${peer} упала: ${e.message}`); }
+      }
+    } finally {
+      syncing = false;
     }
   }, SYNC_INTERVAL);
 }

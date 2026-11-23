@@ -2,20 +2,42 @@
 const API='/api';
 const S={me:null,expPage:0,expPageSize:15,charts:{},chartsInited:false};
 
+// Всё, что пришло из сети (memo, адреса, id), вставляется в HTML только через эти
+// две функции. Иначе чужая транзакция с memo вида <img onerror=...> выполняет
+// свой JS на странице кошелька и уводит сессию.
+function esc(v){
+  return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function safeId(v){
+  return String(v ?? '').replace(/[^A-Za-z0-9_-]/g, '');
+}
+
 async function api(path,opts={}){
+  let r;
   try{
     const token=sessionStorage.getItem('koin_session');
     const headers={'Content-Type':'application/json'};
     if(token)headers['X-Session-Token']=token;
-    const r=await fetch(API+path,{headers,credentials:'include',...opts});
-    if(r.status===401){window.location.href='/';return{error:'unauthorized'}}
-    return await r.json();
+    r=await fetch(API+path,{headers,credentials:'include',...opts});
   }catch{return{error:'network',offline:true}}
+  if(r.status===401){window.location.href='/';return{error:'unauthorized'}}
+  let body=null;
+  try{body=await r.json()}catch{}
+  if(!r.ok){
+    // Сервер ответил ошибкой без JSON (502/504 от прокси, упавший процесс) —
+    // не выдаём это за «сеть недоступна», отдаём статус как есть.
+    return body && typeof body==='object' ? {...body,error:body.error||('HTTP '+r.status)} : {error:'HTTP '+r.status};
+  }
+  return body ?? {error:'bad json'};
 }
 
 let _tt;
 function toast(msg,type='ok'){const t=document.getElementById('toast');t.textContent=msg;t.className='toast '+type+' show';clearTimeout(_tt);_tt=setTimeout(()=>t.className='toast',3500)}
-function copyText(text){navigator.clipboard.writeText(String(text).trim()).then(()=>toast('Скопировано!','info'))}
+function copyText(text){
+  navigator.clipboard.writeText(String(text).trim())
+    .then(()=>toast('Скопировано!','info'))
+    .catch(()=>toast('Не удалось скопировать — выдели и скопируй вручную','err'));
+}
 function timeAgo(ts){const s=Math.floor((Date.now()-ts)/1000);if(s<5)return'только что';if(s<60)return s+'с';if(s<3600)return Math.floor(s/60)+'м';if(s<86400)return Math.floor(s/3600)+'ч';return new Date(ts).toLocaleDateString('ru')}
 function fmtTime(ts){return new Date(ts).toLocaleString('ru')}
 function short(addr,n=8){if(!addr||addr.length<=n*2+3)return addr;return addr.slice(0,n)+'…'+addr.slice(-n)}
@@ -120,10 +142,10 @@ async function loadStats(){
 
 function renderBlock(b){
   const fee=b.transactions?.find(t=>t.from==='SYSTEM_FEE');
-  return`<div class="block-item" onclick="openBlock('${b.hash}')">
-    <div class="block-top"><div class="block-num">#${b.index}</div><div class="block-age">${timeAgo(b.timestamp)}</div></div>
-    <div class="block-hash">⛓ ${b.hash}</div>
-    <div class="block-meta"><span><span class="badge">${b.transactions?.length||0} тр.</span></span><span>diff:${b.difficulty}</span><span>nonce:${(b.nonce||0).toLocaleString()}</span>${fee?`<span>💰+${fee.amount}→${short(fee.to,6)}</span>`:''}</div>
+  return`<div class="block-item" onclick="openBlock('${safeId(b.hash)}')">
+    <div class="block-top"><div class="block-num">#${esc(b.index)}</div><div class="block-age">${timeAgo(b.timestamp)}</div></div>
+    <div class="block-hash">⛓ ${esc(b.hash)}</div>
+    <div class="block-meta"><span><span class="badge">${b.transactions?.length||0} тр.</span></span><span>diff:${esc(b.difficulty)}</span><span>nonce:${(b.nonce||0).toLocaleString()}</span>${fee?`<span>💰+${esc(fee.amount)}→${esc(short(fee.to,6))}</span>`:''}</div>
   </div>`;
 }
 
@@ -131,8 +153,8 @@ function renderTxItem(tx,myAddr){
   const isIn=tx.to===myAddr,isSys=tx.from==='SYSTEM'||tx.from==='SYSTEM_FEE',isPend=!tx.confirmed;
   const dc=isPend?'pend':(isIn?'in':'out'),dl=isPend?'⧖ Ожидает':(isIn?'↙ Получено':'↗ Отправлено');
   const peer=isIn?(isSys?'⛏ Сеть':short(tx.from)):short(tx.to);
-  return`<div class="tx-item" onclick="openTx('${tx.id}')">
-    <div><div class="tx-dir ${dc}">${dl}</div><div class="tx-peer">${peer}</div>${tx.memo?`<div class="tx-memo">${tx.memo}</div>`:''}</div>
+  return`<div class="tx-item" onclick="openTx('${safeId(tx.id)}')">
+    <div><div class="tx-dir ${dc}">${dl}</div><div class="tx-peer">${esc(peer)}</div>${tx.memo?`<div class="tx-memo">${esc(tx.memo)}</div>`:''}</div>
     <div class="tx-right"><div class="tx-amount ${isPend?'':(isIn?'in':'out')}">${isIn?'+':'-'}${tx.amount} QTR</div>${tx.fee>0?`<div class="tx-meta">fee:${tx.fee}</div>`:''}<div class="tx-meta">${timeAgo(tx.timestamp)}</div></div>
   </div>`;
 }
@@ -145,7 +167,13 @@ async function loadWallet(){
   setText('w-balance','...');
   makeQR(document.getElementById('w-qr'),addr,90);
   const[bal,hist]=await Promise.all([api('/balance/'+addr),api('/history/'+addr+'?limit=50')]);
-  if(!bal.error){setText('w-balance',(bal.balance||0).toFixed(6));setText('w-pending',(bal.pendingOut||0).toFixed(6));}
+  if(!bal.error){
+    setText('w-balance',(bal.balance||0).toFixed(6));
+    setText('w-pending',(bal.pendingOut||0).toFixed(6));
+  }else{
+    setText('w-balance','—');
+    toast('Не удалось загрузить баланс: '+(bal.error||'ошибка'),'err');
+  }
   const hEl=document.getElementById('w-history');
   hEl.innerHTML=hist.history?.length?hist.history.map(t=>renderTxItem(t,addr)).join(''):'<div class="empty">Транзакций нет</div>';
 }
@@ -221,7 +249,7 @@ async function loadMempool(){
   setText('mp-cnt',data.count||0);setText('mp-fees',(data.totalFees||0).toFixed(6));
   const el=document.getElementById('mp-list');
   if(!data.mempool?.length){el.innerHTML='<div class="empty">Очередь пуста</div>';return;}
-  el.innerHTML=data.mempool.map(tx=>'<div class="tx-item" onclick="openTx(\''+tx.id+'\')'+'"><div><div class="tx-dir pend">⧖ В очереди</div><div class="tx-peer">'+short(tx.from)+' → '+short(tx.to)+'</div>'+(tx.memo?'<div class="tx-memo">'+tx.memo+'</div>':'')+'</div><div class="tx-right"><div class="tx-amount" style="color:var(--accent2)">'+tx.amount+' QTR</div><div class="tx-meta">fee:'+tx.fee+' · '+timeAgo(tx.timestamp)+'</div></div></div>').join('');
+  el.innerHTML=data.mempool.map(tx=>'<div class="tx-item" onclick="openTx(\''+safeId(tx.id)+'\')'+'"><div><div class="tx-dir pend">⧖ В очереди</div><div class="tx-peer">'+esc(short(tx.from))+' → '+esc(short(tx.to))+'</div>'+(tx.memo?'<div class="tx-memo">'+esc(tx.memo)+'</div>':'')+'</div><div class="tx-right"><div class="tx-amount" style="color:var(--accent2)">'+esc(tx.amount)+' QTR</div><div class="tx-meta">fee:'+esc(tx.fee)+' · '+timeAgo(tx.timestamp)+'</div></div></div>').join('');
 }
 
 function openModal(type,data){document.getElementById('modal').classList.add('open');document.getElementById('modal-body').innerHTML=buildModal(type,data);}
@@ -239,14 +267,14 @@ function buildModal(type,data){
 
 function renderBlockModal(d){
   const b=d.block||d,conf=d.confirmations||0;
-  const txRows=(b.transactions||[]).map(tx=>'<div class="tx-item" onclick="openTx(\''+tx.id+'\')'+'"><div><div class="tx-peer">'+short(tx.from)+' → '+short(tx.to)+'</div>'+(tx.memo?'<div class="tx-memo">'+tx.memo+'</div>':'')+'</div><div class="tx-right"><div class="tx-amount" style="color:var(--accent2)">'+tx.amount+' QTR</div>'+(tx.fee>0?'<div class="tx-meta">fee:'+tx.fee+'</div>':'')+'</div></div>').join('');
+  const txRows=(b.transactions||[]).map(tx=>'<div class="tx-item" onclick="openTx(\''+safeId(tx.id)+'\')'+'"><div><div class="tx-peer">'+esc(short(tx.from))+' → '+esc(short(tx.to))+'</div>'+(tx.memo?'<div class="tx-memo">'+esc(tx.memo)+'</div>':'')+'</div><div class="tx-right"><div class="tx-amount" style="color:var(--accent2)">'+esc(tx.amount)+' QTR</div>'+(tx.fee>0?'<div class="tx-meta">fee:'+esc(tx.fee)+'</div>':'')+'</div></div>').join('');
   return'<div class="modal-title">Блок #'+b.index+' <button class="modal-close" onclick="closeModal()">✕</button></div>'+
-    '<div class="detail-row"><div class="detail-key">Hash</div><div class="detail-val" style="color:var(--accent);cursor:pointer" onclick="copyText(\''+b.hash+'\')">'+b.hash+'</div></div>'+
-    '<div class="detail-row"><div class="detail-key">PrevHash</div><div class="detail-val" style="font-size:11px">'+b.prevHash+'</div></div>'+
+    '<div class="detail-row"><div class="detail-key">Hash</div><div class="detail-val" style="color:var(--accent);cursor:pointer" onclick="copyText(\''+safeId(b.hash)+'\')">'+esc(b.hash)+'</div></div>'+
+    '<div class="detail-row"><div class="detail-key">PrevHash</div><div class="detail-val" style="font-size:11px">'+esc(b.prevHash)+'</div></div>'+
     '<div class="detail-row"><div class="detail-key">Время</div><div class="detail-val">'+fmtTime(b.timestamp)+'</div></div>'+
     '<div class="detail-row"><div class="detail-key">Nonce</div><div class="detail-val">'+(b.nonce||0).toLocaleString()+'</div></div>'+
     '<div class="detail-row"><div class="detail-key">Сложность</div><div class="detail-val">'+b.difficulty+'</div></div>'+
-    '<div class="detail-row"><div class="detail-key">Майнер</div><div class="detail-val" style="cursor:pointer" onclick="openAddr(\''+b.miner+'\')">'+short(b.miner,14)+'</div></div>'+
+    '<div class="detail-row"><div class="detail-key">Майнер</div><div class="detail-val" style="cursor:pointer" onclick="openAddr(\''+safeId(b.miner)+'\')">'+esc(short(b.miner,14))+'</div></div>'+
     '<div class="detail-row"><div class="detail-key">Подтверждений</div><div class="detail-val"><span class="badge green">'+conf+'</span></div></div>'+
     '<div style="margin-top:16px"><div class="label" style="margin-bottom:10px">Транзакции ('+(b.transactions?.length||0)+')</div><div class="tx-list">'+(txRows||'<div class="empty">Нет</div>')+'</div></div>';
 }
@@ -255,13 +283,13 @@ function renderTxModal(d){
   const tx=d.tx||d,conf=d.confirmations;
   const signed=tx.signature&&tx.signature.length>20&&tx.signature!=='GENESIS'&&tx.signature!=='SYSTEM_FEE';
   return'<div class="modal-title">Транзакция <button class="modal-close" onclick="closeModal()">✕</button></div>'+
-    '<div class="detail-row"><div class="detail-key">ID</div><div class="detail-val" style="cursor:pointer" onclick="copyText(\''+tx.id+'\')">'+tx.id+'</div></div>'+
-    '<div class="detail-row"><div class="detail-key">От</div><div class="detail-val" style="color:var(--red);cursor:pointer" onclick="openAddr(\''+tx.from+'\')">'+tx.from+'</div></div>'+
-    '<div class="detail-row"><div class="detail-key">Кому</div><div class="detail-val" style="color:var(--green);cursor:pointer" onclick="openAddr(\''+tx.to+'\')">'+tx.to+'</div></div>'+
-    '<div class="detail-row"><div class="detail-key">Сумма</div><div class="detail-val" style="color:var(--accent2)">'+tx.amount+' QTR</div></div>'+
-    '<div class="detail-row"><div class="detail-key">Комиссия</div><div class="detail-val">'+tx.fee+' QTR</div></div>'+
+    '<div class="detail-row"><div class="detail-key">ID</div><div class="detail-val" style="cursor:pointer" onclick="copyText(\''+safeId(tx.id)+'\')">'+esc(tx.id)+'</div></div>'+
+    '<div class="detail-row"><div class="detail-key">От</div><div class="detail-val" style="color:var(--red);cursor:pointer" onclick="openAddr(\''+safeId(tx.from)+'\')">'+esc(tx.from)+'</div></div>'+
+    '<div class="detail-row"><div class="detail-key">Кому</div><div class="detail-val" style="color:var(--green);cursor:pointer" onclick="openAddr(\''+safeId(tx.to)+'\')">'+esc(tx.to)+'</div></div>'+
+    '<div class="detail-row"><div class="detail-key">Сумма</div><div class="detail-val" style="color:var(--accent2)">'+esc(tx.amount)+' QTR</div></div>'+
+    '<div class="detail-row"><div class="detail-key">Комиссия</div><div class="detail-val">'+esc(tx.fee)+' QTR</div></div>'+
     '<div class="detail-row"><div class="detail-key">Время</div><div class="detail-val">'+fmtTime(tx.timestamp)+'</div></div>'+
-    (tx.memo?'<div class="detail-row"><div class="detail-key">Заметка</div><div class="detail-val">'+tx.memo+'</div></div>':'')+
+    (tx.memo?'<div class="detail-row"><div class="detail-key">Заметка</div><div class="detail-val">'+esc(tx.memo)+'</div></div>':'')+
     '<div class="detail-row"><div class="detail-key">Подпись</div><div class="detail-val">'+(signed?'<span class="badge green">✓ ECDSA</span>':'<span class="badge">Системная</span>')+'</div></div>'+
     '<div class="detail-row"><div class="detail-key">Статус</div><div class="detail-val">'+(d.confirmed===false?'<span class="badge gold">⧖ Ожидает</span>':'<span class="badge green">✓ Подтверждена</span> '+(conf!==undefined?conf+' подтв.':''))+'</div></div>'+
     (d.block!==undefined?'<div class="detail-row"><div class="detail-key">Блок</div><div class="detail-val" style="color:var(--accent);cursor:pointer" onclick="openBlock(\''+d.blockHash+'\')">#'+d.block+'</div></div>':'');
@@ -273,11 +301,11 @@ async function openTx(id){const d=await api('/tx/'+id);if(d.error){toast('Не �
 async function openAddr(address){
   openModal('addr',address);
   const[bal,hist]=await Promise.all([api('/balance/'+address),api('/history/'+address+'?limit=20')]);
-  const txRows=(hist.history||[]).map(tx=>{const isIn=tx.to===address;return'<div class="tx-item" onclick="openTx(\''+tx.id+'\')'+'"><div><div class="tx-dir '+(isIn?'in':'out')+'">'+(isIn?'↙':'↗')+'</div><div class="tx-peer">'+(isIn?short(tx.from):short(tx.to))+'</div></div><div class="tx-right"><div class="tx-amount '+(isIn?'in':'out')+'">'+(isIn?'+':'-')+tx.amount+'</div><div class="tx-meta">'+timeAgo(tx.timestamp)+'</div></div></div>';}).join('');
+  const txRows=(hist.history||[]).map(tx=>{const isIn=tx.to===address;return'<div class="tx-item" onclick="openTx(\''+safeId(tx.id)+'\')'+'"><div><div class="tx-dir '+(isIn?'in':'out')+'">'+(isIn?'↙':'↗')+'</div><div class="tx-peer">'+esc(isIn?short(tx.from):short(tx.to))+'</div></div><div class="tx-right"><div class="tx-amount '+(isIn?'in':'out')+'">'+(isIn?'+':'-')+esc(tx.amount)+'</div><div class="tx-meta">'+timeAgo(tx.timestamp)+'</div></div></div>';}).join('');
   const qDiv=document.createElement('div');
   qDiv.style='display:inline-block;background:#fff;border-radius:10px;padding:8px;margin-bottom:12px';
   if(window.QRCode)new QRCode(qDiv,{text:address,width:80,height:80,colorDark:'#000',colorLight:'#fff'});
-  document.getElementById('modal-body').innerHTML='<div class="modal-title">Адрес <button class="modal-close" onclick="closeModal()">✕</button></div><div style="text-align:center" id="_qph"></div><div class="detail-row"><div class="detail-key">Адрес</div><div class="detail-val" style="cursor:pointer" onclick="copyText(\''+address+'\')">'+address+'</div></div><div class="detail-row"><div class="detail-key">Баланс</div><div class="detail-val" style="color:var(--green)">'+(bal.balance||0).toFixed(6)+' QTR</div></div>'+(bal.pendingOut>0?'<div class="detail-row"><div class="detail-key">В обработке</div><div class="detail-val" style="color:var(--accent2)">'+bal.pendingOut+' QTR</div></div>':'')+'<div style="margin-top:14px"><div class="label" style="margin-bottom:10px">Транзакции</div><div class="tx-list">'+(txRows||'<div class="empty">Нет</div>')+'</div></div>';
+  document.getElementById('modal-body').innerHTML='<div class="modal-title">Адрес <button class="modal-close" onclick="closeModal()">✕</button></div><div style="text-align:center" id="_qph"></div><div class="detail-row"><div class="detail-key">Адрес</div><div class="detail-val" style="cursor:pointer" onclick="copyText(\''+safeId(address)+'\')">'+esc(address)+'</div></div><div class="detail-row"><div class="detail-key">Баланс</div><div class="detail-val" style="color:var(--green)">'+(bal.balance||0).toFixed(6)+' QTR</div></div>'+(bal.pendingOut>0?'<div class="detail-row"><div class="detail-key">В обработке</div><div class="detail-val" style="color:var(--accent2)">'+bal.pendingOut+' QTR</div></div>':'')+'<div style="margin-top:14px"><div class="label" style="margin-bottom:10px">Транзакции</div><div class="tx-list">'+(txRows||'<div class="empty">Нет</div>')+'</div></div>';
   document.getElementById('_qph').appendChild(qDiv);
 }
 
@@ -286,7 +314,7 @@ async function showMnemonic(){
   if(!pass){toast('Введите пароль','err');return;}
   const res=await api('/auth/mnemonic',{method:'POST',body:JSON.stringify({password:pass})});
   const el=document.getElementById('mn-result');
-  if(res.error){el.innerHTML='<div style="color:var(--red);font-family:var(--mono);font-size:13px">'+res.error+'</div>';return;}
+  if(res.error){el.innerHTML='<div style="color:var(--red);font-family:var(--mono);font-size:13px">'+esc(res.error)+'</div>';return;}
   const words=res.mnemonic.split(' ');
   el.innerHTML='<div class="label" style="margin-bottom:8px">Ваш мнемоник</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">'+words.map((w,i)=>'<div style="background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:7px 10px;font-family:var(--mono);font-size:12px;text-align:center"><span style="color:var(--muted);font-size:10px;display:block">'+(i+1)+'</span>'+w+'</div>').join('')+'</div><button class="btn btn-ghost btn-sm btn-full" style="margin-top:10px" onclick="copyText(\''+res.mnemonic+'\')">Скопировать</button>';
 }

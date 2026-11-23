@@ -820,19 +820,23 @@ function timeAgo(ts) {
 
 function short(s, n=8) { return s ? s.slice(0,n)+'…'+s.slice(-4) : ''; }
 
+function esc(v){
+  return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 function renderBlock(b) {
   const fee = b.transactions?.find(t => t.from === 'SYSTEM_FEE');
   return `<div class="l-block" onclick="window.location='/app'">
     <div class="l-block-top">
-      <div class="l-block-num">#${b.index}</div>
+      <div class="l-block-num">#${esc(b.index)}</div>
       <div class="l-block-age">${timeAgo(b.timestamp)} ${T('time.ago')||'назад'}</div>
     </div>
-    <div class="l-block-hash">⛓ ${b.hash}</div>
+    <div class="l-block-hash">⛓ ${esc(b.hash)}</div>
     <div class="l-block-meta">
       <span class="badge">${b.transactions?.length||0} ${T('time.txs_abbr')||'тр.'}</span>
-      <span>diff:${b.difficulty}</span>
+      <span>diff:${esc(b.difficulty)}</span>
       <span>nonce:${(b.nonce||0).toLocaleString('ru')}</span>
-      ${fee ? `<span style="color:var(--gold)">+${fee.amount} QTR</span>` : ''}
+      ${fee ? `<span style="color:var(--gold)">+${esc(fee.amount)} QTR</span>` : ''}
     </div>
   </div>`;
 }
