@@ -1,10 +1,29 @@
 {
   "name": "qatrol-coin",
-  "version": "1.0.0",
-  "private": true,
-  "description": "Qatrol Coin node, web and mining pool",
+  "version": "1.1.0",
+  "description": "Qatrol Coin (QTR): блокчейн, майнер, пул и веб-кошелёк на чистом Node.js",
   "main": "miner.js",
+  "license": "MIT",
+  "author": "Qatrol",
+  "homepage": "https://github.com/Qatrol/qatrol-node#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Qatrol/qatrol-node.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Qatrol/qatrol-node/issues"
+  },
+  "keywords": [
+    "blockchain",
+    "cryptocurrency",
+    "nodejs",
+    "mining",
+    "mining-pool",
+    "p2p",
+    "qtr"
+  ],
   "scripts": {
+    "start": "node miner.js",
     "start:node": "node miner.js",
     "start:web": "node server.js",
     "start:pool": "node pool/server.js",
@@ -27,6 +46,5 @@
   },
   "engines": {
     "node": ">=18"
-  },
-  "license": "UNLICENSED"
+  }
 }

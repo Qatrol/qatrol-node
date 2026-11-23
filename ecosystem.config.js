@@ -2,8 +2,10 @@
 // Запуск: pm2 start ecosystem.config.js
 // Обновление: pm2 reload ecosystem.config.js --update-env
 'use strict';
+const path = require('path');
+// Все пути — от каталога конфига, а не от /root: репозиторий можно положить куда угодно.
 // .env ищется рядом с конфигом; если dotenv не установлен — переменные берутся из pm2.
-try { require('dotenv').config({ path: process.env.QTR_ENV_FILE || require('path').join(__dirname, '.env') }); }
+try { require('dotenv').config({ path: process.env.QTR_ENV_FILE || path.join(__dirname, '.env') }); }
 catch { /* dotenv опционален */ }
 
 const env = {
@@ -29,8 +31,8 @@ module.exports = {
   apps: [
     {
       name: 'qtr-node',
-      script: '/root/miner.js',
-      cwd: '/root',
+      script: path.join(__dirname, 'miner.js'),
+      cwd: __dirname,
       env,
       restart_delay: 5000,
       max_restarts: 999,
@@ -38,8 +40,8 @@ module.exports = {
     },
     {
       name: 'qtr-pool',
-      script: '/root/pool/server.js',
-      cwd: '/root',
+      script: path.join(__dirname, 'pool', 'server.js'),
+      cwd: __dirname,
       env,
       restart_delay: 5000,
       max_restarts: 999,
@@ -47,8 +49,8 @@ module.exports = {
     },
     {
       name: 'qtr-web',
-      script: '/root/server.js',
-      cwd: '/root',
+      script: path.join(__dirname, 'server.js'),
+      cwd: __dirname,
       env,
       restart_delay: 3000,
       max_restarts: 999,
@@ -56,8 +58,8 @@ module.exports = {
     },
     {
       name: 'qtr-bot',
-      script: '/root/bot/index.js',
-      cwd: '/root',
+      script: path.join(__dirname, 'bot', 'index.js'),
+      cwd: __dirname,
       env,
       restart_delay: 8000,
       max_restarts: 999,

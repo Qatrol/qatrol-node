@@ -2,4 +2,18 @@ node_modules/
 .env
 *.log
 dist/
+
+# Рантайм-данные сети, бота и ключи — не коммитить
+logs/
+bot_users.json
+bot_contest.json
+blockchain.json
 blockchain.json.bak
+blockchain.json.tmp
+genesis.json
+peers.json
+wallets.json
+sessions.json
+node_wallet.json
+GENESIS_WALLET_BACKUP.json
+qatrol_wallet_*.txt

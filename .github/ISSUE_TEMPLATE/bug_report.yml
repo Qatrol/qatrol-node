@@ -1,0 +1,22 @@
+name: Баг
+description: Что-то работает не так, как описано в README
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Что случилось
+      description: Что ты делал, что ожидал и что получил.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Логи
+      description: Вывод процессов `node miner.js`, `node server.js`, `node pool/server.js` и `logs/*.log`.
+      render: shell
+  - type: input
+    id: version
+    attributes:
+      label: Версия и окружение
+      placeholder: v1.1.0, Node 22.11, Windows 11 / Ubuntu 24.04

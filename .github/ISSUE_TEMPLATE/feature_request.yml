@@ -1,0 +1,19 @@
+name: Идея
+description: Новая возможность или улучшение
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Задача
+      description: Какую проблему решаем и зачем.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Как это должно работать
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Что уже пробовал или отверг

@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 20, 22]
+
+    env:
+      QTR_PORT: 3001
+      QTR_WEB_PORT: 3000
+      QTR_POOL_PORT: 3002
+      QTR_NO_MINE: 'true'
+      QTR_MINER_ADDRESS: K111111111111111111111111111111111111111
+      QTR_POOL_ADDRESS: K222222222222222222222222222222222222222
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Синтаксис
+        run: |
+          for f in miner.js blockchain.js auth.js server.js pool/server.js pool/miner-client.js p2p/node.js tui/dashboard.js bot/index.js test-api.js; do
+            node --check "$f"
+          done
+
+      - name: Поднять ноду без майнинга
+        run: |
+          node miner.js > node.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:3001/stats > /dev/null && break
+            sleep 1
+          done
+
+      - name: Поднять веб и пул
+        run: |
+          node server.js > web.log 2>&1 &
+          node pool/server.js > pool.log 2>&1 &
+          for i in $(seq 1 20); do
+            curl -sf http://127.0.0.1:3000/ > /dev/null && curl -sf http://127.0.0.1:3002/pool/stats > /dev/null && break
+            sleep 1
+          done
+
+      - name: Тесты API
+        run: node test-api.js
+
+      - name: Логи при падении
+        if: failure()
+        run: |
+          echo '--- node.log ---'; tail -50 node.log
+          echo '--- web.log ---'; tail -50 web.log
+          echo '--- pool.log ---'; tail -50 pool.log
